@@ -170,12 +170,12 @@ if __name__ == "__main__":
 
     # preparing data
     X = df.copy()
-    X = fillna(X, fillna_cols)
     X = drop(X, target_col)
-    X = drop(X, drop_cols)
+    X = fillna(X, fillna_cols)
     X = impute(X, impute_cols)
     X = label_encode(X, label_encode_cols)
     X = one_hot_encode(X, onehot_encode_cols)
+    X = drop(X, drop_cols)
     # print(X)
     y = df[target_col]
     train_X, val_X, train_y, val_y = train_test_split(X, y, random_state=0)
