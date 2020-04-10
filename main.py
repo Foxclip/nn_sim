@@ -46,8 +46,8 @@ def one_hot_encode(df, column_list):
     encoder = OneHotEncoder()
     encoded = pd.DataFrame(encoder.fit_transform(df[column_list]).toarray())
     categories = encoder.categories_
-    for col_i in range(len(onehot_encode_cols)):
-        categories[col_i] = onehot_encode_cols[col_i] + " " + categories[col_i]
+    for col_i in range(len(column_list)):
+        categories[col_i] = column_list[col_i] + " " + categories[col_i]
     categories = np.concatenate(categories)
     encoded.columns = categories
     df = df.drop(column_list, axis=1)
@@ -70,7 +70,14 @@ def find_best_randomstate(train_X, train_y, val_X, val_y):
     return min_index, min_value
 
 
-def save_result(model):
+def save_result_trees(model):
+
+    # column names
+    fillna_cols = ["Cabin", "Embarked"]
+    impute_cols = ["Age", "Fare"]
+    label_encode_cols = ["Sex", "Cabin", "Embarked", "Ticket"]
+    onehot_encode_cols = []
+    drop_cols = ["Name", "PassengerId"]
 
     # loading test dataset
     df_test = pd.read_csv("test.csv")
@@ -79,10 +86,10 @@ def save_result(model):
     # preparing test dataset
     X = df_test.copy()
     X = fillna(X, fillna_cols)
-    X = drop(X, drop_cols)
     X = impute(X, impute_cols)
     X = label_encode(X, label_encode_cols)
     X = one_hot_encode(X, onehot_encode_cols)
+    X = drop(X, drop_cols)
 
     # making predictions on test dataset
     pred_test = model.predict(X)
@@ -100,7 +107,7 @@ def train_and_save(data_split):
     model = RandomForestClassifier(n_estimators=100, max_depth=11)
     model.fit(data_split.train_X, data_split.train_y)
 
-    save_result(model)
+    save_result_trees(model)
 
     # measuring error
     predict = model.predict(data_split.val_X)
@@ -153,12 +160,7 @@ def simulate(data_split):
     plot_avg_for_attr("leafcount", leafcount_lst)
 
 
-if __name__ == "__main__":
-
-    pd.set_option('display.max_columns', 15)
-
-    # loading CSV
-    df = pd.read_csv("train.csv")
+def prepare_for_trees(X):
 
     # column names
     target_col = "Survived"
@@ -178,6 +180,19 @@ if __name__ == "__main__":
     X = drop(X, drop_cols)
     # print(X)
     y = df[target_col]
+
+    return X, y
+
+
+if __name__ == "__main__":
+
+    pd.set_option('display.max_columns', 15)
+
+    # loading CSV
+    df = pd.read_csv("train.csv")
+
+    # preparing data
+    X, y = prepare_for_trees(df)
     train_X, val_X, train_y, val_y = train_test_split(X, y, random_state=0)
     data_split = DataSplit(train_X, val_X, train_y, val_y)
 
