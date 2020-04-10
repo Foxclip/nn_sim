@@ -82,6 +82,7 @@ def save_result(model):
     X = drop(X, drop_cols)
     X = impute(X, impute_cols)
     X = label_encode(X, label_encode_cols)
+    X = one_hot_encode(X, onehot_encode_cols)
 
     # making predictions on test dataset
     pred_test = model.predict(X)
@@ -180,5 +181,5 @@ if __name__ == "__main__":
     train_X, val_X, train_y, val_y = train_test_split(X, y, random_state=0)
     data_split = DataSplit(train_X, val_X, train_y, val_y)
 
-    simulate(data_split)
-    # train_and_save(data_split)
+    # simulate(data_split)
+    train_and_save(data_split)
