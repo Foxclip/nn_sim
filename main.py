@@ -100,7 +100,7 @@ def save_result_trees(model):
     new_df.to_csv("result.csv", index=False)
 
 
-def train_and_save(data_split):
+def train_and_save_trees(data_split):
 
     # training model
     # model = DecisionTreeClassifier(max_depth=10, random_state=17)
@@ -197,4 +197,4 @@ if __name__ == "__main__":
     data_split = DataSplit(train_X, val_X, train_y, val_y)
 
     # simulate(data_split)
-    train_and_save(data_split)
+    train_and_save_trees(data_split)
