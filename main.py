@@ -1,6 +1,7 @@
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
+from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import mean_absolute_error
 from sklearn.model_selection import train_test_split
@@ -16,6 +17,16 @@ class DataSplit:
         self.val_X = val_X
         self.train_y = train_y
         self.val_y = val_y
+
+
+class ColNames:
+    def __init__(self):
+        self.target_col = []
+        self.fillna_cols = []
+        self.impute_cols = []
+        self.label_encode_cols = []
+        self.onehot_encode_cols = []
+        self.drop_cols = []
 
 
 def fillna(df, column_list, value="missing"):
@@ -53,6 +64,12 @@ def one_hot_encode(df, column_list):
     df = df.drop(column_list, axis=1)
     df_encoded = pd.concat([df, encoded], axis=1)
     return df_encoded
+
+
+def scale(df):
+    for col in df:
+        df[col] = StandardScaler().fit_transform(df[[col]])
+    return df
 
 
 def find_best_randomstate(train_X, train_y, val_X, val_y):
@@ -127,7 +144,7 @@ def plot_avg_for_attr(attr_name, attr_lst):
     plt.show()
 
 
-def simulate(data_split):
+def simulate_trees(data_split):
 
     simulation.init()
     simulation.global_data.data_split = data_split
@@ -160,28 +177,76 @@ def simulate(data_split):
     plot_avg_for_attr("leafcount", leafcount_lst)
 
 
-def prepare_for_trees(X):
+def simulate_nn(data_split):
 
-    # column names
-    target_col = "Survived"
-    fillna_cols = ["Cabin", "Embarked"]
-    impute_cols = ["Age", "Fare"]
-    label_encode_cols = ["Sex", "Cabin", "Embarked", "Ticket"]
-    onehot_encode_cols = []
-    drop_cols = ["Name", "PassengerId"]
+    simulation.init()
+    simulation.global_data.data_split = data_split
 
-    # preparing data
+    main_template = {
+        "count": 10,
+        "type": "nn",
+        "layers": 1,
+        "neurons": 3
+    }
+
+    simulation.sim_list([main_template])
+
+    # layers_lst = list(range(1, 6))
+    # neurons_lst = list(range(1, 6))
+    #
+    # def create_sim(layers, neurons):
+    #     template = main_template.copy()
+    #     template["layers"] = layers
+    #     template["neurons"] = neurons
+    #     template["name"] = f"L:{layers} N:{neurons}"
+    #     simulation.add_from_template(template)
+
+    # simulation.grid_search(
+    #     create_sim,
+    #     [layers_lst, neurons_lst],
+    #     "leafcount", "random_state",
+    #     sorted_count=10,
+    #     plot_enabled=False
+    # )
+
+
+def prepare(df, colnames, apply_scaling=False):
     X = df.copy()
-    X = drop(X, target_col)
-    X = fillna(X, fillna_cols)
-    X = impute(X, impute_cols)
-    X = label_encode(X, label_encode_cols)
-    X = one_hot_encode(X, onehot_encode_cols)
-    X = drop(X, drop_cols)
-    # print(X)
-    y = df[target_col]
-
+    X = drop(X, colnames.target_col)
+    X = fillna(X, colnames.fillna_cols)
+    X = impute(X, colnames.impute_cols)
+    X = label_encode(X, colnames.label_encode_cols)
+    X = one_hot_encode(X, colnames.onehot_encode_cols)
+    X = drop(X, colnames.drop_cols)
+    if apply_scaling:
+        X = scale(X)
+    print(X)
+    import sys
+    sys.exit()
+    y = df[colnames.target_col]
     return X, y
+
+
+def prepare_for_trees(X):
+    colnames = ColNames()
+    colnames.target_col = "Survived"
+    colnames.fillna_cols = ["Cabin", "Embarked"]
+    colnames.impute_cols = ["Age", "Fare"]
+    colnames.label_encode_cols = ["Sex", "Cabin", "Embarked", "Ticket"]
+    colnames.onehot_encode_cols = []
+    colnames.drop_cols = ["Name", "PassengerId"]
+    return prepare(df, colnames)
+
+
+def prepare_for_nn(X):
+    colnames = ColNames()
+    colnames.target_col = "Survived"
+    colnames.fillna_cols = ["Cabin", "Embarked"]
+    colnames.impute_cols = ["Age", "Fare"]
+    colnames.label_encode_cols = []
+    colnames.onehot_encode_cols = ["Sex", "Embarked"]
+    colnames.drop_cols = ["Name", "PassengerId", "Ticket", "Cabin"]
+    return prepare(df, colnames, apply_scaling=True)
 
 
 if __name__ == "__main__":
@@ -192,9 +257,9 @@ if __name__ == "__main__":
     df = pd.read_csv("train.csv")
 
     # preparing data
-    X, y = prepare_for_trees(df)
+    X, y = prepare_for_nn(df)
     train_X, val_X, train_y, val_y = train_test_split(X, y, random_state=0)
     data_split = DataSplit(train_X, val_X, train_y, val_y)
 
     # simulate(data_split)
-    train_and_save_trees(data_split)
+    simulate_nn(data_split)
