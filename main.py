@@ -183,10 +183,16 @@ def simulate_nn(data_split):
     simulation.global_data.data_split = data_split
 
     main_template = {
-        "count": 10,
         "type": "nn",
-        "layers": 1,
-        "neurons": 3
+        "name": "Utitled",
+        "layers": [
+            simulation.Dense(units=3, input_dim=11, activation="relu"),
+            simulation.Dense(units=1, activation="linear")
+        ],
+        "optimizer": "Adam",
+        "loss": "mse",
+        "batch_size": 10,
+        "epochs": 100
     }
 
     simulation.sim_list([main_template])
@@ -220,9 +226,9 @@ def prepare(df, colnames, apply_scaling=False):
     X = drop(X, colnames.drop_cols)
     if apply_scaling:
         X = scale(X)
-    print(X)
-    import sys
-    sys.exit()
+    # print(X)
+    # import sys
+    # sys.exit()
     y = df[colnames.target_col]
     return X, y
 

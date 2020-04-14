@@ -1,6 +1,15 @@
+# switching between CPU and GPU
+CPU_MODE = True
+if CPU_MODE:
+    import os
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import mean_absolute_error
+from keras import Sequential
+import keras
 import time
 import multiprocessing
 import sys
@@ -21,6 +30,22 @@ class GlobalData:
     prop_list = []
 
 
+class Dense:
+    """Wrapper for keras.layers.Dense."""
+    def __init__(self, units, input_dim=None, activation=None):
+        self.units = units
+        self.input_dim = input_dim
+        self.activation = activation
+
+    def create(self):
+        """Converts wrapper to an actual keras layer."""
+        return keras.layers.Dense(
+            units=self.units,
+            input_dim=self.input_dim,
+            activation=self.activation
+        )
+
+
 def init():
     global simulations, global_settings, global_data
     simulations = []
@@ -29,21 +54,41 @@ def init():
 
 
 def add_from_template(template):
+
     model = None
-    if template["type"] == "decision_tree":
+
+    # decision tree
+    if template["type"] == "dt":
         model = DecisionTreeClassifier(
             max_depth=template["leafcount"],
             random_state=template["random_state"]
         )
-    elif template["type"] == "random_forest":
+
+    # random forest
+    elif template["type"] == "rf":
         model = RandomForestClassifier(
             n_estimators=template["count"],
             max_depth=template["leafcount"],
             random_state=template["random_state"]
         )
+
+    # neural network
+    elif template["type"] == "nn":
+        model = Sequential()
+        for layer in template["layers"]:
+            model.add(layer.create())
+        model.compile(
+            optimizer=template["optimizer"],
+            loss=template["loss"],
+            metrics=["acc"]
+        )
+        model.batch_size = template["batch_size"]
+        model.epochs = template["epochs"]
+
     new_sim = Simulation(model)
+    if template["type"] in ["dt", "rf"]:
+        new_sim.leafcount = template["leafcount"]
     new_sim.name = template["name"]
-    new_sim.leafcount = template["leafcount"]
     simulations.append(new_sim)
 
 
@@ -140,8 +185,20 @@ class Simulation:
         self.leafcount = None
 
     def run(self):
-        self.model.fit(global_data.data_split.train_X,
-                       global_data.data_split.train_y)
+        if hasattr(self.model, "epochs") and hasattr(self.model, "batch_size"):
+            # print(global_data.data_split.train_X)
+            self.model.fit(
+                global_data.data_split.train_X,
+                global_data.data_split.train_y,
+                epochs=self.model.epochs,
+                batch_size=self.model.batch_size,
+                verbose=0
+            )
+        else:
+            self.model.fit(
+                X=global_data.data_split.train_X,
+                y=global_data.data_split.train_y
+            )
         predict = self.model.predict(global_data.data_split.val_X)
         self.loss = mean_absolute_error(predict, global_data.data_split.val_y)
 
