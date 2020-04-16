@@ -1,5 +1,5 @@
 # switching between CPU and GPU
-CPU_MODE = True
+CPU_MODE = False
 if CPU_MODE:
     import os
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -54,42 +54,9 @@ def init():
 
 
 def add_from_template(template):
-
-    model = None
-
-    # decision tree
-    if template["type"] == "dt":
-        model = DecisionTreeClassifier(
-            max_depth=template["leafcount"],
-            random_state=template["random_state"]
-        )
-
-    # random forest
-    elif template["type"] == "rf":
-        model = RandomForestClassifier(
-            n_estimators=template["count"],
-            max_depth=template["leafcount"],
-            random_state=template["random_state"]
-        )
-
-    # neural network
-    elif template["type"] == "nn":
-        model = Sequential()
-        for layer in template["layers"]:
-            model.add(layer.create())
-        model.compile(
-            optimizer=template["optimizer"],
-            loss=template["loss"],
-            metrics=["acc"]
-        )
-
-    new_sim = Simulation(model)
-    if template["type"] in ["dt", "rf"]:
-        new_sim.leafcount = template["leafcount"]
+    new_sim = Simulation()
+    new_sim.template = template
     new_sim.name = template["name"]
-    new_sim.type = template["type"]
-    new_sim.epochs = template["epochs"]
-    new_sim.batch_size = template["batch_size"]
     simulations.append(new_sim)
 
 
@@ -179,27 +146,51 @@ def grid_search(f, lists, xlabel, ylabel, sorted_count=0, plot_enabled=True):
 
 
 class Simulation:
-    def __init__(self, model):
+    def __init__(self):
         self.name = "Untitled"
-        self.model = model
+        self.model = None
         self.loss = None
         self.leafcount = None
-        self.epochs = None
-        self.batch_size = None
+        self.template = None
+
+    def fit_tree(self):
+        self.model.fit(
+            X=global_data.data_split.train_X,
+            y=global_data.data_split.train_y
+        )
 
     def run(self):
-        if self.type == "nn":
+        # decision tree
+        if self.template["type"] == "dt":
+            self.model = DecisionTreeClassifier(
+                max_depth=self.template["leafcount"],
+                random_state=self.template["random_state"]
+            )
+            self.fit_tree()
+        # random forest
+        elif self.template["type"] == "rf":
+            self.model = RandomForestClassifier(
+                n_estimators=self.template["count"],
+                max_depth=self.template["leafcount"],
+                random_state=self.template["random_state"]
+            )
+            self.fit_tree()
+        # neural network
+        elif self.template["type"] == "nn":
+            self.model = Sequential()
+            for layer in self.template["layers"]:
+                self.model.add(layer.create())
+            self.model.compile(
+                optimizer=self.template["optimizer"],
+                loss=self.template["loss"],
+                metrics=["acc"]
+            )
             self.model.fit(
                 global_data.data_split.train_X,
                 global_data.data_split.train_y,
-                epochs=self.epochs,
-                batch_size=self.batch_size,
+                epochs=self.template["epochs"],
+                batch_size=self.template["batch_size"],
                 verbose=0
-            )
-        elif self.type in ["dt", "rf"]:
-            self.model.fit(
-                X=global_data.data_split.train_X,
-                y=global_data.data_split.train_y
             )
         else:
             raise ValueError(f"Unknown type: {self.type}")
