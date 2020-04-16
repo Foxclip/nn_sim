@@ -82,13 +82,14 @@ def add_from_template(template):
             loss=template["loss"],
             metrics=["acc"]
         )
-        model.batch_size = template["batch_size"]
-        model.epochs = template["epochs"]
 
     new_sim = Simulation(model)
     if template["type"] in ["dt", "rf"]:
         new_sim.leafcount = template["leafcount"]
     new_sim.name = template["name"]
+    new_sim.type = template["type"]
+    new_sim.epochs = template["epochs"]
+    new_sim.batch_size = template["batch_size"]
     simulations.append(new_sim)
 
 
@@ -183,22 +184,25 @@ class Simulation:
         self.model = model
         self.loss = None
         self.leafcount = None
+        self.epochs = None
+        self.batch_size = None
 
     def run(self):
-        if hasattr(self.model, "epochs") and hasattr(self.model, "batch_size"):
-            # print(global_data.data_split.train_X)
+        if self.type == "nn":
             self.model.fit(
                 global_data.data_split.train_X,
                 global_data.data_split.train_y,
-                epochs=self.model.epochs,
-                batch_size=self.model.batch_size,
+                epochs=self.epochs,
+                batch_size=self.batch_size,
                 verbose=0
             )
-        else:
+        elif self.type in ["dt", "rf"]:
             self.model.fit(
                 X=global_data.data_split.train_X,
                 y=global_data.data_split.train_y
             )
+        else:
+            raise ValueError(f"Unknown type: {self.type}")
         predict = self.model.predict(global_data.data_split.val_X)
         self.loss = mean_absolute_error(predict, global_data.data_split.val_y)
 

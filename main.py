@@ -12,11 +12,12 @@ import matplotlib.pyplot as plt
 
 
 class DataSplit:
-    def __init__(self, train_X, val_X, train_y, val_y):
+    def __init__(self, train_X, val_X, train_y, val_y, colcount):
         self.train_X = train_X
         self.val_X = val_X
         self.train_y = train_y
         self.val_y = val_y
+        self.colcount = colcount
 
 
 class ColNames:
@@ -181,12 +182,13 @@ def simulate_nn(data_split):
 
     simulation.init()
     simulation.global_data.data_split = data_split
+    cols = data_split.colcount
 
     main_template = {
         "type": "nn",
         "name": "Utitled",
         "layers": [
-            simulation.Dense(units=3, input_dim=11, activation="relu"),
+            simulation.Dense(units=3, input_dim=cols, activation="relu"),
             simulation.Dense(units=1, activation="linear")
         ],
         "optimizer": "Adam",
@@ -194,8 +196,19 @@ def simulate_nn(data_split):
         "batch_size": 10,
         "epochs": 100
     }
+    templates = []
+    for ucount in [3, 4, 5]:
+        template = main_template.copy()
+        template["layers"][0] = simulation.Dense(
+            units=ucount,
+            input_dim=cols,
+            activation="relu"
+        )
+        template["name"] = f"{ucount} neurons"
+        templates.append(template)
 
-    simulation.sim_list([main_template])
+    # simulation.sim_list([main_template])
+    simulation.sim_list(templates)
 
     # layers_lst = list(range(1, 6))
     # neurons_lst = list(range(1, 6))
@@ -265,7 +278,7 @@ if __name__ == "__main__":
     # preparing data
     X, y = prepare_for_nn(df)
     train_X, val_X, train_y, val_y = train_test_split(X, y, random_state=0)
-    data_split = DataSplit(train_X, val_X, train_y, val_y)
+    data_split = DataSplit(train_X, val_X, train_y, val_y, train_X.shape[1])
 
     # simulate(data_split)
     simulate_nn(data_split)
