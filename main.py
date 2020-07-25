@@ -178,7 +178,7 @@ def simulate_trees(data_split):
     plot_avg_for_attr("leafcount", leafcount_lst)
 
 
-def simulate_nn(data_split):
+def simulate_nn(data_split, epochs):
 
     simulation.init()
     simulation.global_data.data_split = data_split
@@ -194,10 +194,10 @@ def simulate_nn(data_split):
         "optimizer": "Adam",
         "loss": "mse",
         "batch_size": 10,
-        "epochs": 100
+        "epochs": epochs
     }
     templates = []
-    for ucount in [3, 4, 5]:
+    for ucount in range(1, 21):
         template = main_template.copy()
         template["layers"][0] = simulation.Dense(
             units=ucount,
@@ -281,4 +281,4 @@ if __name__ == "__main__":
     data_split = DataSplit(train_X, val_X, train_y, val_y, train_X.shape[1])
 
     # simulate(data_split)
-    simulate_nn(data_split)
+    simulate_nn(data_split, 10)

@@ -1,5 +1,5 @@
 # switching between CPU and GPU
-CPU_MODE = False
+CPU_MODE = True
 if CPU_MODE:
     import os
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -196,6 +196,9 @@ class Simulation:
             raise ValueError(f"Unknown type: {self.type}")
         predict = self.model.predict(global_data.data_split.val_X)
         self.loss = mean_absolute_error(predict, global_data.data_split.val_y)
+        # to avoid sending model back to main thread, which causes error, since
+        # keras model cannot be pickled
+        self.model = None
 
     def get_prop_str(self, prop_list):
         result = ""
