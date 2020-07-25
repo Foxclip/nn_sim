@@ -80,7 +80,8 @@ def run_all(p_prop_list=[], jobs=None):
     global_data.prop_list = p_prop_list
     time1 = time.time()
     global simulations
-    if (jobs is None or jobs > 1) and len(simulations) > 1:
+    if (jobs is None or jobs > 1) and len(simulations) > 1 and CPU_MODE:
+        # run multiple processes
         if len(simulations) < 4:
             jobs = len(simulations)
         with multiprocessing.Pool(
@@ -90,6 +91,7 @@ def run_all(p_prop_list=[], jobs=None):
         ) as pool:
             simulations = pool.map(_run_simulation, simulations)
     else:
+        # run single process
         for sim in simulations:
             _run_simulation(sim)
     time2 = time.time()
