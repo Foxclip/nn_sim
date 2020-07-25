@@ -37,6 +37,10 @@ class Dense:
         self.input_dim = input_dim
         self.activation = activation
 
+    def __repr__(self):
+        input_dim_str = str(self.input_dim) if self.input_dim else "0"
+        return f"Dense(u:{self.units}, i:{input_dim_str}, a:{self.activation})"
+
     def create(self):
         """Converts wrapper to an actual keras layer."""
         return keras.layers.Dense(
@@ -54,7 +58,9 @@ def init():
 
 
 def add_from_template(template):
+    """Creating simulation from a simulation template"""
     new_sim = Simulation()
+    # setting simulation properties from template
     new_sim.template = template
     new_sim.name = template["name"]
     simulations.append(new_sim)
@@ -179,6 +185,12 @@ class Simulation:
             self.fit_tree()
         # neural network
         elif self.template["type"] == "nn":
+            # choosing the loss function from its short name
+            if self.template["loss"] == "bce":
+                self.template["loss"] = keras.losses.binary_crossentropy
+            elif self.template["loss"] == "cce":
+                self.template["loss"] = keras.losses.categorical_crossentropy
+            # creating model
             self.model = Sequential()
             for layer in self.template["layers"]:
                 self.model.add(layer.create())
@@ -187,6 +199,7 @@ class Simulation:
                 loss=self.template["loss"],
                 metrics=["acc"]
             )
+            # running model
             self.model.fit(
                 global_data.data_split.train_X,
                 global_data.data_split.train_y,
@@ -196,10 +209,11 @@ class Simulation:
             )
         else:
             raise ValueError(f"Unknown type: {self.type}")
+        # measuring loss
         predict = self.model.predict(global_data.data_split.val_X)
         self.loss = mean_absolute_error(predict, global_data.data_split.val_y)
-        # to avoid sending model back to main thread, which causes error, since
-        # keras model cannot be pickled
+        # this is needed to avoid sending model back to main thread, which
+        # causes error, since keras model cannot be pickled
         self.model = None
 
     def get_prop_str(self, prop_list):

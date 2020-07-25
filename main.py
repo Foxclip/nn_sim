@@ -1,3 +1,4 @@
+import copy
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
@@ -12,6 +13,7 @@ import matplotlib.pyplot as plt
 
 
 class DataSplit:
+    """Stores training and validation data that is passed to the models."""
     def __init__(self, train_X, val_X, train_y, val_y, colcount):
         self.train_X = train_X
         self.val_X = val_X
@@ -21,6 +23,7 @@ class DataSplit:
 
 
 class ColNames:
+    """Stores column names in one place."""
     def __init__(self):
         self.target_col = []
         self.fillna_cols = []
@@ -31,28 +34,33 @@ class ColNames:
 
 
 def fillna(df, column_list, value="missing"):
+    """Fills missing values with 'missing'"""
     for col in column_list:
         df[col].fillna(value, inplace=True)
     return df
 
 
 def drop(df, column_list):
+    """Drops columns from the dataframe."""
     return df.drop(column_list, axis=1)
 
 
 def impute(df, column_list):
+    """Imputes needed columns."""
     for col in column_list:
         df[col] = SimpleImputer().fit_transform(df[[col]])
     return df
 
 
 def label_encode(df, column_list):
+    """Label encodes needed columns."""
     for col in column_list:
         df[col] = LabelEncoder().fit_transform(df[col])
     return df
 
 
 def one_hot_encode(df, column_list):
+    """One-hot encodes needed columns."""
     if not column_list:
         return df
     encoder = OneHotEncoder()
@@ -68,6 +76,7 @@ def one_hot_encode(df, column_list):
 
 
 def scale(df):
+    """Scales needed columns with a StandardScaler."""
     for col in df:
         df[col] = StandardScaler().fit_transform(df[[col]])
     return df
@@ -160,7 +169,7 @@ def simulate_trees(data_split):
     random_state_lst = list(range(1, 11))
 
     def create_sim(leafcount, random_state):
-        template = main_template.copy()
+        template = copy.deepcopy(main_template)
         template["leafcount"] = leafcount
         template["random_state"] = random_state
         template["name"] = f"lc:{leafcount} rs:{random_state}"
@@ -178,7 +187,8 @@ def simulate_trees(data_split):
     plot_avg_for_attr("leafcount", leafcount_lst)
 
 
-def simulate_nn(data_split, epochs):
+def nn_list(data_split, epochs):
+    """Creates list of simulations with neural networks and runs them."""
 
     simulation.init()
     simulation.global_data.data_split = data_split
@@ -186,19 +196,19 @@ def simulate_nn(data_split, epochs):
 
     main_template = {
         "type": "nn",
-        "name": "Utitled",
+        "name": "Untitled",
         "layers": [
             simulation.Dense(units=3, input_dim=cols, activation="relu"),
-            simulation.Dense(units=1, activation="linear")
+            simulation.Dense(units=1, activation="sigmoid")
         ],
         "optimizer": "Adam",
-        "loss": "mse",
+        "loss": "bce",
         "batch_size": 10,
         "epochs": epochs
     }
     templates = []
     for ucount in range(1, 21):
-        template = main_template.copy()
+        template = copy.deepcopy(main_template)
         template["layers"][0] = simulation.Dense(
             units=ucount,
             input_dim=cols,
@@ -207,29 +217,52 @@ def simulate_nn(data_split, epochs):
         template["name"] = f"{ucount} neurons"
         templates.append(template)
 
-    # simulation.sim_list([main_template])
     simulation.sim_list(templates)
 
-    # layers_lst = list(range(1, 6))
-    # neurons_lst = list(range(1, 6))
-    #
-    # def create_sim(layers, neurons):
-    #     template = main_template.copy()
-    #     template["layers"] = layers
-    #     template["neurons"] = neurons
-    #     template["name"] = f"L:{layers} N:{neurons}"
-    #     simulation.add_from_template(template)
 
-    # simulation.grid_search(
-    #     create_sim,
-    #     [layers_lst, neurons_lst],
-    #     "leafcount", "random_state",
-    #     sorted_count=10,
-    #     plot_enabled=False
-    # )
+def nn_grid(data_split, max_layers, max_neurons, epochs):
+    """Creates grid of simulations with neural networks and runs them."""
+
+    simulation.init()
+    simulation.global_data.data_split = data_split
+    cols = data_split.colcount
+
+    main_template = {
+        "type": "nn",
+        "name": "Untitled",
+        "layers": [
+            simulation.Dense(units=3, input_dim=cols, activation="relu"),
+            simulation.Dense(units=1, activation="sigmoid")
+        ],
+        "optimizer": "Adam",
+        "loss": "bce",
+        "batch_size": 10,
+        "epochs": epochs
+    }
+
+    layers_lst = list(range(0, max_layers + 1))
+    neurons_lst = list(range(1, max_neurons + 1))
+
+    def create_sim(layer_count, neuron_count):
+        template = copy.deepcopy(main_template)
+        template["layers"][0].units = neuron_count
+        for i in range(layer_count):
+            new_layer = simulation.Dense(units=neuron_count, activation="relu")
+            template["layers"].insert(1, new_layer)
+        template["name"] = f"HL:{layer_count} N:{neuron_count}"
+        simulation.add_from_template(template)
+
+    simulation.grid_search(
+        create_sim,
+        [layers_lst, neurons_lst],
+        "layers", "neurons",
+        sorted_count=10,
+        plot_enabled=False
+    )
 
 
 def prepare(df, colnames, apply_scaling=False):
+    """Runs various operations on the dataframe."""
     X = df.copy()
     X = drop(X, colnames.target_col)
     X = fillna(X, colnames.fillna_cols)
@@ -247,6 +280,7 @@ def prepare(df, colnames, apply_scaling=False):
 
 
 def prepare_for_trees(X):
+    """Prepares the dataframe for trees."""
     colnames = ColNames()
     colnames.target_col = "Survived"
     colnames.fillna_cols = ["Cabin", "Embarked"]
@@ -258,6 +292,7 @@ def prepare_for_trees(X):
 
 
 def prepare_for_nn(X):
+    """Prepares the dataframe for neural networks."""
     colnames = ColNames()
     colnames.target_col = "Survived"
     colnames.fillna_cols = ["Cabin", "Embarked"]
@@ -270,6 +305,7 @@ def prepare_for_nn(X):
 
 if __name__ == "__main__":
 
+    # Increasing number of columns so all of them are showed
     pd.set_option('display.max_columns', 15)
 
     # loading CSV
@@ -281,4 +317,4 @@ if __name__ == "__main__":
     data_split = DataSplit(train_X, val_X, train_y, val_y, train_X.shape[1])
 
     # simulate(data_split)
-    simulate_nn(data_split, 10)
+    nn_grid(data_split, 5, 5, 1000)
