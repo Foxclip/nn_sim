@@ -1,9 +1,14 @@
 # switching between CPU and GPU
 CPU_MODE = True
+import os
 if CPU_MODE:
-    import os
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
     os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+
+# disabling tensorflow debug messages
+DISABLE_ALL_TENSORFLOW_MESSAGES = True
+if DISABLE_ALL_TENSORFLOW_MESSAGES:
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
