@@ -187,7 +187,7 @@ def simulate_trees(data_split):
     plot_avg_for_attr("leafcount", leafcount_lst)
 
 
-def nn_list(data_split, epochs):
+def nn_list(data_split, max_neurons, epochs):
     """Creates list of simulations with neural networks and runs them."""
 
     simulation.init()
@@ -207,13 +207,10 @@ def nn_list(data_split, epochs):
         "epochs": epochs
     }
     templates = []
-    for ucount in range(1, 21):
+    for ucount in range(1, max_neurons):
         template = copy.deepcopy(main_template)
-        template["layers"][0] = simulation.Dense(
-            units=ucount,
-            input_dim=cols,
-            activation="relu"
-        )
+        new_layer = simulation.Dense(units=ucount, activation="relu")
+        template["layers"].insert(1, new_layer)
         template["name"] = f"{ucount} neurons"
         templates.append(template)
 
@@ -316,5 +313,5 @@ if __name__ == "__main__":
     train_X, val_X, train_y, val_y = train_test_split(X, y, random_state=0)
     data_split = DataSplit(train_X, val_X, train_y, val_y, train_X.shape[1])
 
-    # simulate(data_split)
-    nn_grid(data_split, 5, 5, 1000)
+    nn_list(data_split, 10, 100)
+    # nn_grid(data_split, 5, 5, 1000)

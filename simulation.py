@@ -7,9 +7,8 @@ if CPU_MODE:
 
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import mean_absolute_error
-from keras import Sequential
-import keras
+from sklearn.metrics import mean_absolute_error, accuracy_score
+import numpy as np
 import time
 import multiprocessing
 import sys
@@ -43,7 +42,8 @@ class Dense:
 
     def create(self):
         """Converts wrapper to an actual keras layer."""
-        return keras.layers.Dense(
+        from keras.layers import Dense
+        return Dense(
             units=self.units,
             input_dim=self.input_dim,
             activation=self.activation
@@ -122,7 +122,7 @@ def sim_list(template_list, plotting=["loss"]):
     for template in template_list:
         add_from_template(template)
     # running simulations
-    run_all(["name", "loss"], jobs=None)
+    run_all(["name", "loss", "accuracy"], jobs=None)
     # plotting results
     if "--noplot" not in sys.argv:
         if "loss" in plotting:
@@ -158,6 +158,7 @@ class Simulation:
         self.name = "Untitled"
         self.model = None
         self.loss = None
+        self.accuracy = None
         self.leafcount = None
         self.template = None
 
@@ -187,10 +188,13 @@ class Simulation:
         elif self.template["type"] == "nn":
             # choosing the loss function from its short name
             if self.template["loss"] == "bce":
-                self.template["loss"] = keras.losses.binary_crossentropy
+                from keras.losses import binary_crossentropy
+                self.template["loss"] = binary_crossentropy
             elif self.template["loss"] == "cce":
-                self.template["loss"] = keras.losses.categorical_crossentropy
+                from keras.losses import categorical_crossentropy
+                self.template["loss"] = categorical_crossentropy
             # creating model
+            from keras import Sequential
             self.model = Sequential()
             for layer in self.template["layers"]:
                 self.model.add(layer.create())
@@ -210,8 +214,10 @@ class Simulation:
         else:
             raise ValueError(f"Unknown type: {self.type}")
         # measuring loss
-        predict = self.model.predict(global_data.data_split.val_X)
-        self.loss = mean_absolute_error(predict, global_data.data_split.val_y)
+        predict = np.round(self.model.predict(global_data.data_split.val_X))
+        # print(global_data.data_split.val_y)
+        self.loss = mean_absolute_error(global_data.data_split.val_y, predict)
+        self.accuracy = accuracy_score(global_data.data_split.val_y, predict)
         # this is needed to avoid sending model back to main thread, which
         # causes error, since keras model cannot be pickled
         self.model = None
