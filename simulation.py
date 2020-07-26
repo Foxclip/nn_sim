@@ -10,6 +10,9 @@ DISABLE_ALL_TENSORFLOW_MESSAGES = True
 if DISABLE_ALL_TENSORFLOW_MESSAGES:
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
+import tensorflow as tf
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import mean_absolute_error, accuracy_score
@@ -223,6 +226,8 @@ class Simulation:
         # print(global_data.data_split.val_y)
         self.loss = mean_absolute_error(global_data.data_split.val_y, predict)
         self.accuracy = accuracy_score(global_data.data_split.val_y, predict)
+        # saving
+        self.model.save(f"models/{self.name}")
         # this is needed to avoid sending model back to main thread, which
         # causes error, since keras model cannot be pickled
         self.model = None
