@@ -9,7 +9,6 @@ if CPU_MODE:
 DISABLE_ALL_TENSORFLOW_MESSAGES = True
 if DISABLE_ALL_TENSORFLOW_MESSAGES:
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-
 import tensorflow as tf
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
@@ -26,6 +25,7 @@ import itertools
 
 simulations = None
 global_data = None
+network_id = 0
 
 
 class GlobalSettings:
@@ -70,6 +70,9 @@ def add_from_template(template):
     new_sim = Simulation()
     # setting simulation properties from template
     new_sim.template = template
+    global network_id
+    new_sim.id = network_id
+    network_id += 1
     new_sim.name = template["name"]
     simulations.append(new_sim)
 
@@ -227,7 +230,7 @@ class Simulation:
         self.loss = mean_absolute_error(global_data.data_split.val_y, predict)
         self.accuracy = accuracy_score(global_data.data_split.val_y, predict)
         # saving
-        self.model.save(f"models/{self.name}")
+        self.model.save(f"models/{self.id}")
         # this is needed to avoid sending model back to main thread, which
         # causes error, since keras model cannot be pickled
         self.model = None

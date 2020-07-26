@@ -9,6 +9,8 @@ from sklearn.model_selection import train_test_split
 import pandas as pd
 import numpy as np
 import simulation
+import shutil
+import os
 import matplotlib.pyplot as plt
 
 
@@ -300,6 +302,19 @@ def prepare_for_nn(X):
     return prepare(df, colnames, apply_scaling=True)
 
 
+def clear_folder(folder):
+    """Deletes contents of a folder."""
+    for filename in os.listdir(folder):
+        file_path = os.path.join(folder, filename)
+        try:
+            if os.path.isfile(file_path) or os.path.islink(file_path):
+                os.unlink(file_path)
+            elif os.path.isdir(file_path):
+                shutil.rmtree(file_path)
+        except Exception as e:
+            print('Failed to delete %s. Reason: %s' % (file_path, e))
+
+
 if __name__ == "__main__":
 
     # Increasing number of columns so all of them are showed
@@ -312,6 +327,9 @@ if __name__ == "__main__":
     X, y = prepare_for_nn(df)
     train_X, val_X, train_y, val_y = train_test_split(X, y, random_state=0)
     data_split = DataSplit(train_X, val_X, train_y, val_y, train_X.shape[1])
+
+    # deleting saved models
+    clear_folder("models")
 
     nn_list(data_split, 10, 100)
     # nn_grid(data_split, 5, 5, 1000)
