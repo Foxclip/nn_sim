@@ -16,6 +16,7 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import mean_absolute_error, accuracy_score
 import numpy as np
+import shutil
 import time
 import multiprocessing
 import sys
@@ -94,8 +95,11 @@ def _run_simulation(sim):
 
 def run_all(p_prop_list=[], jobs=None):
     print("Running simulations")
+    # setting prop list so it will be copied between processes
     global_data.prop_list = p_prop_list
+    # measuring time
     time1 = time.time()
+    # running simulations
     global simulations
     if (jobs is None or jobs > 1) and len(simulations) > 1 and CPU_MODE:
         # run multiple processes
@@ -111,6 +115,13 @@ def run_all(p_prop_list=[], jobs=None):
         # run single process
         for sim in simulations:
             _run_simulation(sim)
+    # choosing and saving best model
+    losses = [sim.loss for sim in simulations]
+    min_id = np.argmin(losses)
+    if os.path.exists("best_model"):
+        shutil.rmtree("best_model")
+    shutil.copytree(f"models/{min_id}", "best_model")
+    # measuring time
     time2 = time.time()
     time_passed = time2 - time1
     print(f"Time: {time_passed}s")
