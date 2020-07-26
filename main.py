@@ -1,3 +1,16 @@
+import os
+# switching between CPU and GPU
+CPU_MODE = True
+if CPU_MODE:
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+# disabling tensorflow debug messages
+DISABLE_ALL_TENSORFLOW_MESSAGES = True
+if DISABLE_ALL_TENSORFLOW_MESSAGES:
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+import tensorflow as tf
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+
 import copy
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
@@ -6,6 +19,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import mean_absolute_error
 from sklearn.model_selection import train_test_split
+import keras
 import pandas as pd
 import numpy as np
 import simulation
@@ -216,7 +230,7 @@ def nn_list(data_split, max_neurons, epochs):
         template["name"] = f"{ucount} neurons"
         templates.append(template)
 
-    simulation.sim_list(templates)
+    simulation.sim_list(templates, plotting=[])
 
 
 def nn_grid(data_split, max_layers, max_neurons, epochs):
@@ -260,10 +274,11 @@ def nn_grid(data_split, max_layers, max_neurons, epochs):
     )
 
 
-def prepare(df, colnames, apply_scaling=False):
+def prepare(df, colnames, apply_scaling=False, target=True):
     """Runs various operations on the dataframe."""
     X = df.copy()
-    X = drop(X, colnames.target_col)
+    if target:
+        X = drop(X, colnames.target_col)
     X = fillna(X, colnames.fillna_cols)
     X = impute(X, colnames.impute_cols)
     X = label_encode(X, colnames.label_encode_cols)
@@ -271,14 +286,14 @@ def prepare(df, colnames, apply_scaling=False):
     X = drop(X, colnames.drop_cols)
     if apply_scaling:
         X = scale(X)
-    # print(X)
-    # import sys
-    # sys.exit()
-    y = df[colnames.target_col]
-    return X, y
+    if target:
+        y = df[colnames.target_col]
+        return X, y
+    else:
+        return X
 
 
-def prepare_for_trees(X):
+def prepare_for_trees(df):
     """Prepares the dataframe for trees."""
     colnames = ColNames()
     colnames.target_col = "Survived"
@@ -290,7 +305,7 @@ def prepare_for_trees(X):
     return prepare(df, colnames)
 
 
-def prepare_for_nn(X):
+def prepare_for_nn(df, target=True):
     """Prepares the dataframe for neural networks."""
     colnames = ColNames()
     colnames.target_col = "Survived"
@@ -299,7 +314,7 @@ def prepare_for_nn(X):
     colnames.label_encode_cols = []
     colnames.onehot_encode_cols = ["Sex", "Embarked"]
     colnames.drop_cols = ["Name", "PassengerId", "Ticket", "Cabin"]
-    return prepare(df, colnames, apply_scaling=True)
+    return prepare(df, colnames, apply_scaling=True, target=target)
 
 
 def clear_folder(folder):
@@ -315,21 +330,50 @@ def clear_folder(folder):
             print('Failed to delete %s. Reason: %s' % (file_path, e))
 
 
+def train_models(max_neurons, epochs):
+    """Train models and save them."""
+    # loading CSV
+    df = pd.read_csv("train.csv")
+    # preparing data
+    X, y = prepare_for_nn(df)
+    train_X, val_X, train_y, val_y = train_test_split(X, y, random_state=0)
+    data_split = DataSplit(train_X, val_X, train_y, val_y, train_X.shape[1])
+    # deleting saved models
+    clear_folder("models")
+    # training models
+    nn_list(data_split, max_neurons, epochs)
+    # nn_grid(data_split, 5, 5, 1000)
+    # saving column names
+    df = pd.DataFrame(X.columns)
+    df.columns = ["Column names"]
+    df.to_csv("column_names.csv")
+
+
+def make_predictions():
+    """Make predictions with the best model."""
+    print("Making predictions...")
+    # loading test CSV
+    df = pd.read_csv("test.csv")
+    # preparing data
+    X = prepare_for_nn(df, target=False)
+    # filling missing columns with zeroes
+    column_list = pd.read_csv("column_names.csv")["Column names"]
+    missing_columns = [col for col in column_list if col not in X.columns]
+    for col in missing_columns:
+        X[col] = 0.0
+    # loading best model
+    best_model = keras.models.load_model("best_model")
+    # making predictions
+    predict = np.round(best_model.predict(X))
+    df = df[["PassengerId"]]
+    df["Survived"] = predict
+    df.to_csv("output.csv", index=False)
+
+
 if __name__ == "__main__":
 
     # Increasing number of columns so all of them are showed
     pd.set_option('display.max_columns', 15)
 
-    # loading CSV
-    df = pd.read_csv("train.csv")
-
-    # preparing data
-    X, y = prepare_for_nn(df)
-    train_X, val_X, train_y, val_y = train_test_split(X, y, random_state=0)
-    data_split = DataSplit(train_X, val_X, train_y, val_y, train_X.shape[1])
-
-    # deleting saved models
-    clear_folder("models")
-
-    nn_list(data_split, 10, 100)
-    # nn_grid(data_split, 5, 5, 1000)
+    train_models(10, 1000)
+    make_predictions()

@@ -1,20 +1,9 @@
-# switching between CPU and GPU
-CPU_MODE = True
-import os
-if CPU_MODE:
-    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-
-# disabling tensorflow debug messages
-DISABLE_ALL_TENSORFLOW_MESSAGES = True
-if DISABLE_ALL_TENSORFLOW_MESSAGES:
-    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-import tensorflow as tf
-tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
-
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import mean_absolute_error, accuracy_score
+from main import CPU_MODE
+import os
+import keras
 import numpy as np
 import shutil
 import time
@@ -51,8 +40,7 @@ class Dense:
 
     def create(self):
         """Converts wrapper to an actual keras layer."""
-        from keras.layers import Dense
-        return Dense(
+        return keras.layers.Dense(
             units=self.units,
             input_dim=self.input_dim,
             activation=self.activation
@@ -210,14 +198,11 @@ class Simulation:
         elif self.template["type"] == "nn":
             # choosing the loss function from its short name
             if self.template["loss"] == "bce":
-                from keras.losses import binary_crossentropy
-                self.template["loss"] = binary_crossentropy
+                self.template["loss"] = keras.losses.binary_crossentropy
             elif self.template["loss"] == "cce":
-                from keras.losses import categorical_crossentropy
-                self.template["loss"] = categorical_crossentropy
+                self.template["loss"] = keras.losses.categorical_crossentropy
             # creating model
-            from keras import Sequential
-            self.model = Sequential()
+            self.model = keras.models.Sequential()
             for layer in self.template["layers"]:
                 self.model.add(layer.create())
             self.model.compile(
