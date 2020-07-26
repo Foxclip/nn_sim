@@ -203,6 +203,36 @@ def simulate_trees(data_split):
     plot_avg_for_attr("leafcount", leafcount_lst)
 
 
+def nn_one(data_split, layer_count, neuron_count, epochs):
+    """Creates one simulation with neural network and runs it."""
+
+    simulation.init()
+    simulation.global_data.data_split = data_split
+    cols = data_split.colcount
+
+    main_template = {
+        "type": "nn",
+        "name": "Untitled",
+        "layers": [
+            simulation.Dense(units=3, input_dim=cols, activation="relu"),
+            simulation.Dense(units=1, activation="sigmoid")
+        ],
+        "optimizer": "Adam",
+        "loss": "bce",
+        "batch_size": 10,
+        "epochs": epochs
+    }
+    templates = []
+    template = copy.deepcopy(main_template)
+    for i in range(layer_count - 1):
+        new_layer = simulation.Dense(units=neuron_count, activation="relu")
+        template["layers"].insert(1, new_layer)
+    template["name"] = f"HL:{layer_count} N:{neuron_count} neurons"
+    templates.append(template)
+
+    simulation.sim_list(templates, plotting=[])
+
+
 def nn_list(data_split, max_neurons, epochs):
     """Creates list of simulations with neural networks and runs them."""
 
@@ -225,8 +255,8 @@ def nn_list(data_split, max_neurons, epochs):
     templates = []
     for ucount in range(1, max_neurons):
         template = copy.deepcopy(main_template)
-        new_layer = simulation.Dense(units=ucount, activation="relu")
-        template["layers"].insert(1, new_layer)
+        # new_layer = simulation.Dense(units=ucount, activation="relu")
+        # template["layers"].insert(1, new_layer)
         template["name"] = f"{ucount} neurons"
         templates.append(template)
 
@@ -330,7 +360,7 @@ def clear_folder(folder):
             print('Failed to delete %s. Reason: %s' % (file_path, e))
 
 
-def train_models(max_neurons, epochs):
+def train_models(layers, neurons, epochs):
     """Train models and save them."""
     # loading CSV
     df = pd.read_csv("train.csv")
@@ -341,7 +371,7 @@ def train_models(max_neurons, epochs):
     # deleting saved models
     clear_folder("models")
     # training models
-    nn_list(data_split, max_neurons, epochs)
+    nn_one(data_split, layers, neurons, epochs)
     # nn_grid(data_split, 5, 5, 1000)
     # saving column names
     df = pd.DataFrame(X.columns)
@@ -367,6 +397,7 @@ def make_predictions():
     predict = np.round(best_model.predict(X))
     df = df[["PassengerId"]]
     df["Survived"] = predict
+    df["Survived"] = df["Survived"].astype(int)
     df.to_csv("output.csv", index=False)
 
 
@@ -375,5 +406,5 @@ if __name__ == "__main__":
     # Increasing number of columns so all of them are showed
     pd.set_option('display.max_columns', 15)
 
-    train_models(10, 1000)
+    train_models(1, 3, 10000)
     make_predictions()
