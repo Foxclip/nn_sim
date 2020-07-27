@@ -143,18 +143,21 @@ def grid_search(f, lists, xlabel, ylabel, sorted_count=0, plot_enabled=True):
     # creating simulations
     create_grid(lists, f)
     # running simulations
-    run_all(["name", "loss"], jobs=None)
+    run_all(["name", "loss", "accuracy"], jobs=None)
     # printing results
     simulations_copy = simulations.copy()
     simulations_copy.sort(key=lambda x: x.loss)
     print("==============================================")
     for sim in simulations_copy[:sorted_count]:
-        sim.print_props(["name", "loss"])
+        sim.print_props(["name", "loss", "accuracy"])
     open("output.txt", "w")
     file = open("output.txt", "a")
     for sim_i in range(len(simulations_copy)):
         sim = simulations_copy[sim_i]
-        file.write(f"<{sim_i + 1}> {sim.get_prop_str(['name', 'loss'])}")
+        file.write(
+            f"<{sim_i + 1}> "
+            f"{sim.get_prop_str(['name', 'loss', 'accuracy'])}"
+        )
         file.write("\n")
     file.close()
     # plotting results if there are two parameter lists

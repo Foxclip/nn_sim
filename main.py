@@ -208,67 +208,7 @@ def simulate_trees(data_split):
     plot_avg_for_attr("leafcount", leafcount_lst)
 
 
-def nn_one(data_split, layer_count, neuron_count, epochs):
-    """Creates one simulation with neural network and runs it."""
-
-    simulation.init()
-    simulation.global_data.data_split = data_split
-    cols = data_split.colcount
-
-    main_template = {
-        "type": "nn",
-        "name": "Untitled",
-        "layers": [
-            simulation.Dense(units=3, input_dim=cols, activation="relu"),
-            simulation.Dense(units=1, activation="sigmoid")
-        ],
-        "optimizer": "Adam",
-        "loss": "bce",
-        "batch_size": 10,
-        "epochs": epochs
-    }
-    templates = []
-    template = copy.deepcopy(main_template)
-    for i in range(layer_count - 1):
-        new_layer = simulation.Dense(units=neuron_count, activation="relu")
-        template["layers"].insert(1, new_layer)
-    template["name"] = f"HL:{layer_count} N:{neuron_count} neurons"
-    templates.append(template)
-
-    simulation.sim_list(templates, plotting=[])
-
-
-def nn_list(data_split, max_neurons, epochs):
-    """Creates list of simulations with neural networks and runs them."""
-
-    simulation.init()
-    simulation.global_data.data_split = data_split
-    cols = data_split.colcount
-
-    main_template = {
-        "type": "nn",
-        "name": "Untitled",
-        "layers": [
-            simulation.Dense(units=3, input_dim=cols, activation="relu"),
-            simulation.Dense(units=1, activation="sigmoid")
-        ],
-        "optimizer": "Adam",
-        "loss": "bce",
-        "batch_size": 10,
-        "epochs": epochs
-    }
-    templates = []
-    for ucount in range(1, max_neurons):
-        template = copy.deepcopy(main_template)
-        # new_layer = simulation.Dense(units=ucount, activation="relu")
-        # template["layers"].insert(1, new_layer)
-        template["name"] = f"{ucount} neurons"
-        templates.append(template)
-
-    simulation.sim_list(templates, plotting=[])
-
-
-def nn_grid(data_split, max_layers, max_neurons, epochs):
+def nn_grid(data_split, layers_lst, neurons_lst, epochs):
     """Creates grid of simulations with neural networks and runs them."""
 
     simulation.init()
@@ -287,9 +227,6 @@ def nn_grid(data_split, max_layers, max_neurons, epochs):
         "batch_size": 10,
         "epochs": epochs
     }
-
-    layers_lst = list(range(0, max_layers + 1))
-    neurons_lst = list(range(1, max_neurons + 1))
 
     def create_sim(layer_count, neuron_count):
         template = copy.deepcopy(main_template)
@@ -347,6 +284,7 @@ def prepare_for_nn(df):
     global colnames
     colnames = ColNames()
     colnames.target_col = "Survived"
+    colnames.test_id = "PassengerId"
     colnames.fillna_cols = ["Cabin", "Embarked"]
     colnames.impute_cols = ["Age", "Fare"]
     colnames.label_encode_cols = []
@@ -381,13 +319,12 @@ def load_data():
     return data_split, X_test
 
 
-def train_models(data_split, layers, neurons, epochs):
+def train_models(data_split, layers_lst, neurons_lst, epochs):
     """Train models and save them."""
     # deleting saved models
     clear_folder("models")
     # training models
-    nn_one(data_split, layers, neurons, epochs)
-    # nn_grid(data_split, 5, 5, 1000)
+    nn_grid(data_split, layers_lst, neurons_lst, epochs)
     return X_test
 
 
@@ -400,7 +337,7 @@ def make_predictions(X_test):
     best_model = keras.models.load_model("best_model")
     # making predictions
     predict = np.round(best_model.predict(X_test))
-    df = df[["PassengerId"]]
+    df = df[[colnames.test_id]]
     df[colnames.target_col] = predict
     df[colnames.target_col] = df[colnames.target_col].astype(int)
     df.to_csv("output.csv", index=False)
@@ -414,5 +351,7 @@ if __name__ == "__main__":
     # loading data
     data_split, X_test = load_data()
     # training models and saving file with predictions on test dataset
-    X_test = train_models(data_split, layers=1, neurons=3, epochs=100)
+    layers_lst = [1, 2, 3]
+    neurons_lst = [3, 4, 5]
+    X_test = train_models(data_split, layers_lst, neurons_lst, epochs=1000)
     make_predictions(X_test)
