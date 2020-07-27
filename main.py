@@ -28,6 +28,9 @@ import os
 import matplotlib.pyplot as plt
 
 
+colnames = None
+
+
 class DataSplit:
     """Stores training and validation data that is passed to the models."""
     def __init__(self, train_X, val_X, train_y, val_y, colcount):
@@ -328,6 +331,7 @@ def prepare(df, colnames, apply_scaling=False):
 
 def prepare_for_trees(df):
     """Prepares the dataframe for trees."""
+    global colnames
     colnames = ColNames()
     colnames.target_col = "Survived"
     colnames.fillna_cols = ["Cabin", "Embarked"]
@@ -340,6 +344,7 @@ def prepare_for_trees(df):
 
 def prepare_for_nn(df):
     """Prepares the dataframe for neural networks."""
+    global colnames
     colnames = ColNames()
     colnames.target_col = "Survived"
     colnames.fillna_cols = ["Cabin", "Embarked"]
@@ -376,10 +381,8 @@ def load_data():
     return data_split, X_test
 
 
-def train_models(layers, neurons, epochs):
+def train_models(data_split, layers, neurons, epochs):
     """Train models and save them."""
-    # loading data
-    data_split, X_test = load_data()
     # deleting saved models
     clear_folder("models")
     # training models
@@ -398,8 +401,8 @@ def make_predictions(X_test):
     # making predictions
     predict = np.round(best_model.predict(X_test))
     df = df[["PassengerId"]]
-    df["Survived"] = predict
-    df["Survived"] = df["Survived"].astype(int)
+    df[colnames.target_col] = predict
+    df[colnames.target_col] = df[colnames.target_col].astype(int)
     df.to_csv("output.csv", index=False)
 
 
@@ -408,6 +411,8 @@ if __name__ == "__main__":
     # Increasing number of columns so all of them are showed
     pd.set_option('display.max_columns', 15)
 
+    # loading data
+    data_split, X_test = load_data()
     # training models and saving file with predictions on test dataset
-    X_test = train_models(1, 3, 100)
+    X_test = train_models(data_split, layers=1, neurons=3, epochs=100)
     make_predictions(X_test)
