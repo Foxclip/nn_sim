@@ -91,9 +91,11 @@ def one_hot_encode(df, column_list):
     return df_encoded
 
 
-def scale(df):
+def scale(df, exclude_cols=[]):
     """Scales needed columns with a StandardScaler."""
     for col in df:
+        if col in exclude_cols:
+            continue
         df[col] = StandardScaler().fit_transform(df[[col]])
     return df
 
@@ -304,23 +306,24 @@ def nn_grid(data_split, max_layers, max_neurons, epochs):
     )
 
 
-def prepare(df, colnames, apply_scaling=False, target=True):
+def prepare(df, colnames, apply_scaling=False):
     """Runs various operations on the dataframe."""
     X = df.copy()
-    if target:
-        X = drop(X, colnames.target_col)
     X = fillna(X, colnames.fillna_cols)
     X = impute(X, colnames.impute_cols)
     X = label_encode(X, colnames.label_encode_cols)
     X = one_hot_encode(X, colnames.onehot_encode_cols)
     X = drop(X, colnames.drop_cols)
     if apply_scaling:
-        X = scale(X)
-    if target:
-        y = df[colnames.target_col]
-        return X, y
-    else:
-        return X
+        X = scale(X, exclude_cols=[colnames.target_col])
+    # this has to be done since test rows are here too, and in test dataset
+    # target values are missing
+    X_train = X.dropna(subset=[colnames.target_col])
+    y_train = X_train[colnames.target_col]
+    X_train = drop(X_train, colnames.target_col)
+    X_test = X[X[colnames.target_col].isnull()]
+    X_test = drop(X_test, colnames.target_col)
+    return X_train, X_test, y_train
 
 
 def prepare_for_trees(df):
@@ -335,7 +338,7 @@ def prepare_for_trees(df):
     return prepare(df, colnames)
 
 
-def prepare_for_nn(df, target=True):
+def prepare_for_nn(df):
     """Prepares the dataframe for neural networks."""
     colnames = ColNames()
     colnames.target_col = "Survived"
@@ -344,7 +347,7 @@ def prepare_for_nn(df, target=True):
     colnames.label_encode_cols = []
     colnames.onehot_encode_cols = ["Sex", "Embarked"]
     colnames.drop_cols = ["Name", "PassengerId", "Ticket", "Cabin"]
-    return prepare(df, colnames, apply_scaling=True, target=target)
+    return prepare(df, colnames, apply_scaling=True)
 
 
 def clear_folder(folder):
@@ -360,41 +363,40 @@ def clear_folder(folder):
             print('Failed to delete %s. Reason: %s' % (file_path, e))
 
 
+def load_data():
+    # loading CSV
+    train_df = pd.read_csv("train.csv")
+    test_df = pd.read_csv("test.csv")
+    df = pd.concat([train_df, test_df], ignore_index=True, sort=False)
+    df.to_csv("df.csv")
+    # preparing data
+    X_train, X_test, y_train = prepare_for_nn(df)
+    train_X, val_X, train_y, val_y = train_test_split(X_train, y_train)
+    data_split = DataSplit(train_X, val_X, train_y, val_y, train_X.shape[1])
+    return data_split, X_test
+
+
 def train_models(layers, neurons, epochs):
     """Train models and save them."""
-    # loading CSV
-    df = pd.read_csv("train.csv")
-    # preparing data
-    X, y = prepare_for_nn(df)
-    train_X, val_X, train_y, val_y = train_test_split(X, y, random_state=0)
-    data_split = DataSplit(train_X, val_X, train_y, val_y, train_X.shape[1])
+    # loading data
+    data_split, X_test = load_data()
     # deleting saved models
     clear_folder("models")
     # training models
     nn_one(data_split, layers, neurons, epochs)
     # nn_grid(data_split, 5, 5, 1000)
-    # saving column names
-    df = pd.DataFrame(X.columns)
-    df.columns = ["Column names"]
-    df.to_csv("column_names.csv")
+    return X_test
 
 
-def make_predictions():
+def make_predictions(X_test):
     """Make predictions with the best model."""
     print("Making predictions...")
     # loading test CSV
     df = pd.read_csv("test.csv")
-    # preparing data
-    X = prepare_for_nn(df, target=False)
-    # filling missing columns with zeroes
-    column_list = pd.read_csv("column_names.csv")["Column names"]
-    missing_columns = [col for col in column_list if col not in X.columns]
-    for col in missing_columns:
-        X[col] = 0.0
     # loading best model
     best_model = keras.models.load_model("best_model")
     # making predictions
-    predict = np.round(best_model.predict(X))
+    predict = np.round(best_model.predict(X_test))
     df = df[["PassengerId"]]
     df["Survived"] = predict
     df["Survived"] = df["Survived"].astype(int)
@@ -406,5 +408,6 @@ if __name__ == "__main__":
     # Increasing number of columns so all of them are showed
     pd.set_option('display.max_columns', 15)
 
-    train_models(1, 3, 10000)
-    make_predictions()
+    # training models and saving file with predictions on test dataset
+    X_test = train_models(1, 3, 100)
+    make_predictions(X_test)

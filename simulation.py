@@ -222,7 +222,6 @@ class Simulation:
             raise ValueError(f"Unknown type: {self.type}")
         # measuring loss
         predict = np.round(self.model.predict(global_data.data_split.val_X))
-        # print(global_data.data_split.val_y)
         self.loss = mean_absolute_error(global_data.data_split.val_y, predict)
         self.accuracy = accuracy_score(global_data.data_split.val_y, predict)
         # saving
