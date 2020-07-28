@@ -25,10 +25,8 @@ import numpy as np
 import simulation
 import shutil
 import os
+import enum
 import matplotlib.pyplot as plt
-
-
-colnames = None
 
 
 class DataSplit:
@@ -44,12 +42,37 @@ class DataSplit:
 class ColNames:
     """Stores column names in one place."""
     def __init__(self):
-        self.target_col = []
+        self.target_col = None
+        self.test_id = None  # leftmost column in final output on test dataset
         self.fillna_cols = []
         self.impute_cols = []
         self.label_encode_cols = []
         self.onehot_encode_cols = []
         self.drop_cols = []
+
+
+class TaskTypes(enum.Enum):
+    """Types of tasks for neural networks."""
+    regression = 0,
+    binary_classification = 1,
+    multiclass_classification = 2
+
+
+class ModelSettings:
+    """Stores settings of model."""
+    def __init__(self):
+        pass
+
+
+class NeuralNetworkSettings(ModelSettings):
+    """Stores settings of a neural network."""
+    def __init__(self):
+        self.task_type = TaskTypes.binary_classification
+        self.intermediate_activations = "relu"
+        self.output_count = 1
+        self.optimizer = "Adam"
+        self.batch_size = 10
+        self.epochs = 100
 
 
 def fillna(df, column_list, value="missing"):
@@ -208,24 +231,47 @@ def simulate_trees(data_split):
     plot_avg_for_attr("leafcount", leafcount_lst)
 
 
-def nn_grid(data_split, layers_lst, neurons_lst, epochs):
+def nn_grid(data_split, model_settings, layers_lst, neurons_lst):
     """Creates grid of simulations with neural networks and runs them."""
 
+    # starting up
     simulation.init()
+    # loading data to simulation module
     simulation.global_data.data_split = data_split
-    cols = data_split.colcount
+
+    # deciding activations and loss functions based on task type
+    last_activation = None
+    loss_function = None
+    if model_settings.task_type == TaskTypes.regression:
+        last_activation = "linear"
+        loss_function = "mse"
+    elif model_settings.task_type == TaskTypes.binary_classification:
+        last_activation = "sigmoid"
+        loss_function = "bce"
+    elif model_settings.task_type == TaskTypes.multiclass_classification:
+        last_activation = "sigmoid"
+        loss_function = "cce"
+    else:
+        raise Exception(f"Unknown task type: {model_settings.task_type}")
 
     main_template = {
         "type": "nn",
-        "name": "Untitled",
+        "name": "Untitled",  # should be overriden later
         "layers": [
-            simulation.Dense(units=3, input_dim=cols, activation="relu"),
-            simulation.Dense(units=1, activation="sigmoid")
+            simulation.Dense(
+                units=-1,  # should be overriden later
+                input_dim=data_split.colcount,
+                activation=model_settings.intermediate_activations
+            ),
+            simulation.Dense(
+                units=model_settings.output_count,
+                activation=last_activation
+            )
         ],
-        "optimizer": "Adam",
-        "loss": "bce",
-        "batch_size": 10,
-        "epochs": epochs
+        "optimizer": model_settings.optimizer,
+        "loss": loss_function,
+        "batch_size": model_settings.batch_size,
+        "epochs": model_settings.epochs
     }
 
     def create_sim(layer_count, neuron_count):
@@ -279,20 +325,6 @@ def prepare_for_trees(df):
     return prepare(df, colnames)
 
 
-def prepare_for_nn(df):
-    """Prepares the dataframe for neural networks."""
-    global colnames
-    colnames = ColNames()
-    colnames.target_col = "Survived"
-    colnames.test_id = "PassengerId"
-    colnames.fillna_cols = ["Cabin", "Embarked"]
-    colnames.impute_cols = ["Age", "Fare"]
-    colnames.label_encode_cols = []
-    colnames.onehot_encode_cols = ["Sex", "Embarked"]
-    colnames.drop_cols = ["Name", "PassengerId", "Ticket", "Cabin"]
-    return prepare(df, colnames, apply_scaling=True)
-
-
 def clear_folder(folder):
     """Deletes contents of a folder."""
     for filename in os.listdir(folder):
@@ -306,14 +338,14 @@ def clear_folder(folder):
             print('Failed to delete %s. Reason: %s' % (file_path, e))
 
 
-def load_data():
+def load_data(colnames):
     # loading CSV
     train_df = pd.read_csv("train.csv")
     test_df = pd.read_csv("test.csv")
     df = pd.concat([train_df, test_df], ignore_index=True, sort=False)
     df.to_csv("df.csv")
     # preparing data
-    X_train, X_test, y_train = prepare_for_nn(df)
+    X_train, X_test, y_train = prepare(df, colnames, apply_scaling=True)
     train_X, val_X, train_y, val_y = train_test_split(X_train, y_train)
     data_split = DataSplit(train_X, val_X, train_y, val_y, train_X.shape[1])
     return data_split, X_test
@@ -325,10 +357,9 @@ def train_models(data_split, layers_lst, neurons_lst, epochs):
     clear_folder("models")
     # training models
     nn_grid(data_split, layers_lst, neurons_lst, epochs)
-    return X_test
 
 
-def make_predictions(X_test):
+def make_predictions(X_test, colnames):
     """Make predictions with the best model."""
     print("Making predictions...")
     # loading test CSV
@@ -348,10 +379,34 @@ if __name__ == "__main__":
     # Increasing number of columns so all of them are showed
     pd.set_option('display.max_columns', 15)
 
-    # loading data
-    data_split, X_test = load_data()
-    # training models and saving file with predictions on test dataset
+    # specifying what to do with dataset
+    colnames = ColNames()
+    colnames.target_col = "Survived"
+    colnames.test_id = "PassengerId"
+    colnames.fillna_cols = ["Cabin", "Embarked"]
+    colnames.impute_cols = ["Age", "Fare"]
+    colnames.label_encode_cols = []
+    colnames.onehot_encode_cols = ["Sex", "Embarked"]
+    colnames.drop_cols = ["Name", "PassengerId", "Ticket", "Cabin"]
+
+    # specifying settings of a model
+    model_settings = NeuralNetworkSettings()
+    model_settings.task_type = TaskTypes.binary_classification
+    model_settings.intermediate_activations = "relu"
+    model_settings.output_count = 1
+    model_settings.optimizer = "Adam"
+    model_settings.batch_size = 10
+    model_settings.epochs = 100
+
+    # specifying lists
     layers_lst = [1, 2, 3]
     neurons_lst = [3, 4, 5]
-    X_test = train_models(data_split, layers_lst, neurons_lst, epochs=1000)
-    make_predictions(X_test)
+
+    # loading data
+    data_split, X_test = load_data(colnames)
+
+    # training models and saving file with predictions on test dataset
+    train_models(data_split, model_settings, layers_lst, neurons_lst)
+
+    # making predictions with the best model
+    make_predictions(X_test, colnames)
