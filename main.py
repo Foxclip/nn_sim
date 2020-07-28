@@ -338,12 +338,13 @@ def clear_folder(folder):
             print('Failed to delete %s. Reason: %s' % (file_path, e))
 
 
-def load_data(colnames):
+def load_data(colnames, f):
     # loading CSV
     train_df = pd.read_csv("train.csv")
     test_df = pd.read_csv("test.csv")
     df = pd.concat([train_df, test_df], ignore_index=True, sort=False)
-    df.to_csv("df.csv")
+    # applying transformations (feature engineering)
+    df = f(df)
     # preparing data
     X_train, X_test, y_train = prepare(df, colnames, apply_scaling=True)
     train_X, val_X, train_y, val_y = train_test_split(X_train, y_train)
@@ -379,6 +380,11 @@ if __name__ == "__main__":
     # Increasing number of columns so all of them are showed
     pd.set_option('display.max_columns', 15)
 
+    # defining dataset transormations (feature engineering)
+    def transform_dataset(df):
+        df["Family"] = df["SibSp"] + df["Parch"]
+        return df
+
     # specifying what to do with dataset
     colnames = ColNames()
     colnames.target_col = "Survived"
@@ -387,7 +393,8 @@ if __name__ == "__main__":
     colnames.impute_cols = ["Age", "Fare"]
     colnames.label_encode_cols = []
     colnames.onehot_encode_cols = ["Sex", "Embarked"]
-    colnames.drop_cols = ["Name", "PassengerId", "Ticket", "Cabin"]
+    colnames.drop_cols = ["Name", "PassengerId", "Ticket", "Cabin", "SibSp",
+                          "Parch"]
 
     # specifying settings of a model
     model_settings = NeuralNetworkSettings()
@@ -396,14 +403,14 @@ if __name__ == "__main__":
     model_settings.output_count = 1
     model_settings.optimizer = "Adam"
     model_settings.batch_size = 10
-    model_settings.epochs = 100
+    model_settings.epochs = 5000
 
-    # specifying lists
+    # specifying lists of parameters
     layers_lst = [1, 2, 3]
     neurons_lst = [3, 4, 5]
 
-    # loading data
-    data_split, X_test = load_data(colnames)
+    # loading and preparing data
+    data_split, X_test = load_data(colnames, transform_dataset)
 
     # training models and saving file with predictions on test dataset
     train_models(data_split, model_settings, layers_lst, neurons_lst)
