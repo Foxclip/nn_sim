@@ -44,11 +44,6 @@ class ColNames:
     def __init__(self):
         self.target_col = None
         self.test_id = None  # leftmost column in final output on test dataset
-        self.fillna_cols = []
-        self.impute_cols = []
-        self.label_encode_cols = []
-        self.onehot_encode_cols = []
-        self.drop_cols = []
 
 
 class TaskTypes(enum.Enum):
@@ -90,7 +85,8 @@ def drop(df, column_list):
 def impute(df, column_list):
     """Imputes needed columns."""
     for col in column_list:
-        df[col] = SimpleImputer().fit_transform(df[[col]])
+        strategy = "most_frequent" if df[col].dtype == np.object else "mean"
+        df[col] = SimpleImputer(strategy=strategy).fit_transform(df[[col]])
     return df
 
 
@@ -105,6 +101,8 @@ def one_hot_encode(df, column_list):
     """One-hot encodes needed columns."""
     if not column_list:
         return df
+    for col in column_list:
+        df[col] = df[col].astype(str)
     encoder = OneHotEncoder()
     encoded = pd.DataFrame(encoder.fit_transform(df[column_list]).toarray())
     categories = encoder.categories_
@@ -292,16 +290,8 @@ def nn_grid(data_split, model_settings, layers_lst, neurons_lst):
     )
 
 
-def prepare(df, colnames, apply_scaling=False):
-    """Runs various operations on the dataframe."""
-    X = df.copy()
-    X = fillna(X, colnames.fillna_cols)
-    X = impute(X, colnames.impute_cols)
-    X = label_encode(X, colnames.label_encode_cols)
-    X = one_hot_encode(X, colnames.onehot_encode_cols)
-    X = drop(X, colnames.drop_cols)
-    if apply_scaling:
-        X = scale(X, exclude_cols=[colnames.target_col])
+def cut_dataset(X, colnames):
+    """Cuts dataset into train, test and y parts."""
     # this has to be done since test rows are here too, and in test dataset
     # target values are missing
     X_train = X.dropna(subset=[colnames.target_col])
@@ -343,10 +333,14 @@ def load_data(colnames, f):
     train_df = pd.read_csv("train.csv")
     test_df = pd.read_csv("test.csv")
     df = pd.concat([train_df, test_df], ignore_index=True, sort=False)
-    # applying transformations (feature engineering)
+    # applying externally defined transformations (feature engineering and
+    # encoding)
     df = f(df)
+    # print(df)
+    # import sys
+    # sys.exit(0)
     # preparing data
-    X_train, X_test, y_train = prepare(df, colnames, apply_scaling=True)
+    X_train, X_test, y_train = cut_dataset(df, colnames)
     train_X, val_X, train_y, val_y = train_test_split(X_train, y_train)
     data_split = DataSplit(train_X, val_X, train_y, val_y, train_X.shape[1])
     return data_split, X_test
@@ -378,23 +372,38 @@ def make_predictions(X_test, colnames):
 if __name__ == "__main__":
 
     # Increasing number of columns so all of them are showed
-    pd.set_option('display.max_columns', 15)
+    pd.set_option('display.max_columns', 20)
 
-    # defining dataset transormations (feature engineering)
+    # defining dataset transormations (feature engineering, encoding, etc.)
     def transform_dataset(df):
+
+        df = fillna(df, [])
+        df = impute(df, ["Age", "Fare", "Embarked"])
+
+        # whether passenger is alone
         df["Family"] = df["SibSp"] + df["Parch"]
+        df["IsAlone"] = df["Family"] == 0
+        df = drop(df, ["SibSp", "Parch", "Family"])
+
+        # age categories
+        df["AgeCat"] = pd.cut(
+            df["Age"],
+            (0, 18, 35, 60, 120),
+            labels=["Child", "Young", "Middle", "Old"]
+        )
+
+        df = label_encode(df, [])
+        df = one_hot_encode(df, ["Sex", "Embarked", "Pclass", "AgeCat",
+                                 "IsAlone"])
+        df = drop(df, ["Name", "PassengerId", "Ticket", "Cabin", "Age"])
+        df = scale(df, exclude_cols=["Survived"])
+
         return df
 
     # specifying what to do with dataset
     colnames = ColNames()
     colnames.target_col = "Survived"
     colnames.test_id = "PassengerId"
-    colnames.fillna_cols = ["Cabin", "Embarked"]
-    colnames.impute_cols = ["Age", "Fare"]
-    colnames.label_encode_cols = []
-    colnames.onehot_encode_cols = ["Sex", "Embarked"]
-    colnames.drop_cols = ["Name", "PassengerId", "Ticket", "Cabin", "SibSp",
-                          "Parch"]
 
     # specifying settings of a model
     model_settings = NeuralNetworkSettings()
@@ -403,7 +412,7 @@ if __name__ == "__main__":
     model_settings.output_count = 1
     model_settings.optimizer = "Adam"
     model_settings.batch_size = 10
-    model_settings.epochs = 5000
+    model_settings.epochs = 1000
 
     # specifying lists of parameters
     layers_lst = [1, 2, 3]
