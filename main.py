@@ -386,15 +386,21 @@ if __name__ == "__main__":
         df = drop(df, ["SibSp", "Parch", "Family"])
 
         # age categories
-        df["AgeCat"] = pd.cut(
+        df["Age"] = pd.cut(
             df["Age"],
             (0, 18, 35, 60, 120),
             labels=["Child", "Young", "Middle", "Old"]
         )
+        df["Fare"] = pd.cut(
+            df["Fare"],
+            (0, 10, 100, 600),
+            include_lowest=True,
+            labels=["0-10", "10-100", "100-600"],
+        )
 
         df = label_encode(df, [])
-        df = one_hot_encode(df, ["Sex", "Embarked", "Pclass", "AgeCat",
-                                 "IsAlone"])
+        df = one_hot_encode(df, ["Sex", "Embarked", "Pclass", "IsAlone",
+                                 "Fare"])
         df = drop(df, ["Name", "PassengerId", "Ticket", "Cabin", "Age"])
         df = scale(df, exclude_cols=["Survived"])
 
@@ -412,7 +418,7 @@ if __name__ == "__main__":
     model_settings.output_count = 1
     model_settings.optimizer = "Adam"
     model_settings.batch_size = 10
-    model_settings.epochs = 1000
+    model_settings.epochs = 5000
 
     # specifying lists of parameters
     layers_lst = [1, 2, 3]
