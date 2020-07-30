@@ -143,8 +143,8 @@ def sim_list(template_list, plotting=["loss"]):
 
 def grid_search(f, lists, xlabel, ylabel, sorted_count=0, plot_enabled=True):
     # list of properties to print
-    prop_lst = ["name", "val_loss", "overfitting", "val_accuracy"]
-    prop_aliases = ["name", "vl", "of", "va"]
+    prop_lst = ["name", "train_accuracy", "val_accuracy", "overfitting"]
+    prop_aliases = ["name", "ta", "va", "of"]
     # creating simulations
     create_grid(lists, f)
     # running simulations

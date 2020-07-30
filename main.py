@@ -275,10 +275,10 @@ def nn_grid(data_split, model_settings, layers_lst, neurons_lst):
     def create_sim(layer_count, neuron_count):
         template = copy.deepcopy(main_template)
         template["layers"][0].units = neuron_count
-        for i in range(layer_count):
+        for i in range(layer_count - 1):
             new_layer = simulation.Dense(units=neuron_count, activation="relu")
             template["layers"].insert(1, new_layer)
-        template["name"] = f"HL:{layer_count} N:{neuron_count}"
+        template["name"] = f"HL:{layer_count:2.0f} N:{neuron_count:2.0f}"
         simulation.add_from_template(template)
 
     simulation.grid_search(
@@ -336,9 +336,6 @@ def load_data(colnames, f):
     # applying externally defined transformations (feature engineering and
     # encoding)
     df = f(df)
-    # print(df)
-    # import sys
-    # sys.exit(0)
     # preparing data
     X_train, X_test, y_train = cut_dataset(df, colnames)
     train_X, val_X, train_y, val_y = train_test_split(X_train, y_train)
@@ -383,25 +380,29 @@ if __name__ == "__main__":
         # whether passenger is alone
         df["Family"] = df["SibSp"] + df["Parch"]
         df["IsAlone"] = df["Family"] == 0
-        # df = drop(df, ["SibSp", "Parch", "Family"])
+        df = drop(df, ["SibSp", "Parch", "Family"])
 
         # age categories
-        df["Age"] = pd.cut(
-            df["Age"],
-            (0, 18, 35, 60, 120),
-            labels=["Child", "Young", "Middle", "Old"]
-        )
-        df["Fare"] = pd.cut(
-            df["Fare"],
-            (0, 10, 100, 600),
-            include_lowest=True,
-            labels=["0-10", "10-100", "100-600"],
-        )
+        # df["Age"] = pd.cut(
+        #     df["Age"],
+        #     (0, 18, 35, 60, 120),
+        #     labels=["Child", "Young", "Middle", "Old"]
+        # )
+        # df["Fare"] = pd.cut(
+        #     df["Fare"],
+        #     (0, 10, 100, 600),
+        #     include_lowest=True,
+        #     labels=["0-10", "10-100", "100-600"],
+        # )
 
         df = label_encode(df, [])
-        df = one_hot_encode(df, ["Sex", "Embarked", "Pclass", "Fare"])
-        df = drop(df, ["Name", "PassengerId", "Ticket", "Cabin", "Age"])
+        df = one_hot_encode(df, ["Sex", "Embarked", "Pclass"])
+        df = drop(df, ["Name", "PassengerId", "Ticket", "Cabin"])
         df = scale(df, exclude_cols=["Survived"])
+
+        # print(df)
+        # import sys
+        # sys.exit(0)
 
         return df
 
@@ -416,12 +417,12 @@ if __name__ == "__main__":
     model_settings.intermediate_activations = "relu"
     model_settings.output_count = 1
     model_settings.optimizer = "Adam"
-    model_settings.batch_size = 10
-    model_settings.epochs = 100
+    model_settings.batch_size = 32
+    model_settings.epochs = 320
 
     # specifying lists of parameters
     layers_lst = [1, 2, 3]
-    neurons_lst = [3, 4, 5]
+    neurons_lst = [3, 4, 5, 6, 7, 8, 9, 10, 11]
 
     # loading and preparing data
     data_split, X_test = load_data(colnames, transform_dataset)
