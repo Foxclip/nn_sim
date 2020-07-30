@@ -19,7 +19,7 @@ network_id = 0
 
 
 class GlobalSettings:
-    pass
+    float_digits = 10
 
 
 class GlobalData:
@@ -256,7 +256,10 @@ class Simulation:
             if prop_name == "name":
                 result += f"{prop_value} "
                 continue
-            result += f"{prop_aliases[i]}:{prop_value} "
+            if type(prop_value) in [np.float64, float]:
+                result += f"{prop_aliases[i]}:{prop_value:8.5f} "
+            else:
+                result += f"{prop_aliases[i]}:{prop_value} "
         return result
 
     def print_props(self, prop_list, prop_aliases):
