@@ -25,6 +25,7 @@ class GlobalSettings:
 class GlobalData:
     data_split = None
     prop_list = []
+    prop_aliases = []
 
 
 class Dense:
@@ -77,14 +78,15 @@ def _global_init(p_global_settings, p_global_data):
 def _run_simulation(sim):
     sim.run()
     if global_data.prop_list:
-        sim.print_props(global_data.prop_list)
+        sim.print_props(global_data.prop_list, global_data.prop_aliases)
     return sim
 
 
-def run_all(p_prop_list=[], jobs=None):
+def run_all(p_prop_list=[], p_prop_aliases=[], jobs=None):
     print("Running simulations")
     # setting prop list so it will be copied between processes
     global_data.prop_list = p_prop_list
+    global_data.prop_aliases = p_prop_aliases
     # measuring time
     time1 = time.time()
     # running simulations
@@ -104,7 +106,7 @@ def run_all(p_prop_list=[], jobs=None):
         for sim in simulations:
             _run_simulation(sim)
     # choosing and saving best model
-    losses = [sim.loss for sim in simulations]
+    losses = [sim.val_loss for sim in simulations]
     min_id = np.argmin(losses)
     if os.path.exists("best_model"):
         shutil.rmtree("best_model")
@@ -140,23 +142,26 @@ def sim_list(template_list, plotting=["loss"]):
 
 
 def grid_search(f, lists, xlabel, ylabel, sorted_count=0, plot_enabled=True):
+    # list of properties to print
+    prop_lst = ["name", "val_loss", "overfitting", "val_accuracy"]
+    prop_aliases = ["name", "vl", "of", "va"]
     # creating simulations
     create_grid(lists, f)
     # running simulations
-    run_all(["name", "loss", "accuracy"], jobs=None)
+    run_all(prop_lst, prop_aliases, jobs=None)
     # printing results
     simulations_copy = simulations.copy()
-    simulations_copy.sort(key=lambda x: x.loss)
+    simulations_copy.sort(key=lambda x: x.val_loss)
     print("==============================================")
     for sim in simulations_copy[:sorted_count]:
-        sim.print_props(["name", "loss", "accuracy"])
+        sim.print_props(prop_lst, prop_aliases)
     open("output.txt", "w")
     file = open("output.txt", "a")
     for sim_i in range(len(simulations_copy)):
         sim = simulations_copy[sim_i]
         file.write(
             f"<{sim_i + 1}> "
-            f"{sim.get_prop_str(['name', 'loss', 'accuracy'])}"
+            f"{sim.get_prop_str(prop_lst, prop_aliases)}"
         )
         file.write("\n")
     file.close()
@@ -170,8 +175,11 @@ class Simulation:
     def __init__(self):
         self.name = "Untitled"
         self.model = None
-        self.loss = None
-        self.accuracy = None
+        self.train_loss = None
+        self.val_losss = None
+        self.train_accuracy = None
+        self.val_accuracy = None
+        self.overfitting = None
         self.leafcount = None
         self.template = None
 
@@ -223,25 +231,33 @@ class Simulation:
             )
         else:
             raise ValueError(f"Unknown type: {self.type}")
-        # measuring loss
-        predict = np.round(self.model.predict(global_data.data_split.val_X))
-        self.loss = mean_absolute_error(global_data.data_split.val_y, predict)
-        self.accuracy = accuracy_score(global_data.data_split.val_y, predict)
+        # measuring loss and accuracy
+        train_X = global_data.data_split.train_X
+        val_X = global_data.data_split.val_X
+        train_y = global_data.data_split.train_y
+        val_y = global_data.data_split.val_y
+        train_predict = np.round(self.model.predict(train_X))
+        val_predict = np.round(self.model.predict(val_X))
+        self.train_loss = mean_absolute_error(train_y, train_predict)
+        self.val_loss = mean_absolute_error(val_y, val_predict)
+        self.train_accuracy = accuracy_score(train_y, train_predict)
+        self.val_accuracy = accuracy_score(val_y, val_predict)
+        self.overfitting = self.val_loss - self.train_loss
         # saving
         self.model.save(f"models/{self.id}")
         # this is needed to avoid sending model back to main thread, which
         # causes error, since keras model cannot be pickled
         self.model = None
 
-    def get_prop_str(self, prop_list):
+    def get_prop_str(self, prop_list, prop_aliases):
         result = ""
-        for prop_name in prop_list:
+        for i, prop_name in enumerate(prop_list):
             prop_value = getattr(self, prop_name)
             if prop_name == "name":
                 result += f"{prop_value} "
                 continue
-            result += f"{prop_name}:{prop_value} "
+            result += f"{prop_aliases[i]}:{prop_value} "
         return result
 
-    def print_props(self, prop_list):
-        print(self.get_prop_str(prop_list))
+    def print_props(self, prop_list, prop_aliases):
+        print(self.get_prop_str(prop_list, prop_aliases))

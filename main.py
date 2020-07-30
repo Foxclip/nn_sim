@@ -417,7 +417,7 @@ if __name__ == "__main__":
     model_settings.output_count = 1
     model_settings.optimizer = "Adam"
     model_settings.batch_size = 10
-    model_settings.epochs = 1000
+    model_settings.epochs = 100
 
     # specifying lists of parameters
     layers_lst = [1, 2, 3]
