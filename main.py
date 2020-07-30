@@ -383,7 +383,7 @@ if __name__ == "__main__":
         # whether passenger is alone
         df["Family"] = df["SibSp"] + df["Parch"]
         df["IsAlone"] = df["Family"] == 0
-        df = drop(df, ["SibSp", "Parch", "Family"])
+        # df = drop(df, ["SibSp", "Parch", "Family"])
 
         # age categories
         df["Age"] = pd.cut(
@@ -399,8 +399,7 @@ if __name__ == "__main__":
         )
 
         df = label_encode(df, [])
-        df = one_hot_encode(df, ["Sex", "Embarked", "Pclass", "IsAlone",
-                                 "Fare"])
+        df = one_hot_encode(df, ["Sex", "Embarked", "Pclass", "Fare"])
         df = drop(df, ["Name", "PassengerId", "Ticket", "Cabin", "Age"])
         df = scale(df, exclude_cols=["Survived"])
 
@@ -418,7 +417,7 @@ if __name__ == "__main__":
     model_settings.output_count = 1
     model_settings.optimizer = "Adam"
     model_settings.batch_size = 10
-    model_settings.epochs = 5000
+    model_settings.epochs = 1000
 
     # specifying lists of parameters
     layers_lst = [1, 2, 3]
