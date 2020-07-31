@@ -24,6 +24,7 @@ setuptools.setup(
         "sklearn",
         "keras",
         "numpy",
-        "matplotlib"
+        "matplotlib",
+        "pandas"
     ]
 )

@@ -1,7 +1,7 @@
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import mean_absolute_error, accuracy_score
-from main import CPU_MODE
+from nn_sim.dataset import CPU_MODE
 import os
 import keras
 import numpy as np
@@ -9,7 +9,7 @@ import shutil
 import time
 import multiprocessing
 import sys
-import nn_sim.plot as plot
+from nn_sim import plot
 import itertools
 
 
