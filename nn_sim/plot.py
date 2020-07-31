@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 from mpl_toolkits import mplot3d  # noqa
-import simulation
+import nn_sim.simulation as simulation
 import numpy as np
 
 

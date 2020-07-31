@@ -9,7 +9,7 @@ import shutil
 import time
 import multiprocessing
 import sys
-import plot
+import nn_sim.plot as plot
 import itertools
 
 
