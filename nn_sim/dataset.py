@@ -215,5 +215,5 @@ def make_predictions(X):
     # loading best model
     best_model = keras.models.load_model("best_model")
     # making predictions
-    predict = np.round(best_model.predict(X))
+    predict = best_model.predict(X)
     return predict
