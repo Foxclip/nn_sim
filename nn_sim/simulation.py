@@ -10,6 +10,7 @@ import time
 import multiprocessing
 import sys
 from nn_sim import plot
+import enum
 import itertools
 
 
@@ -19,13 +20,21 @@ network_id = 0
 
 
 class GlobalSettings:
-    float_digits = 10
+    pass
 
 
 class GlobalData:
     data_split = None
     prop_list = []
     prop_aliases = []
+    model_settings = None
+
+
+class TaskTypes(enum.Enum):
+    """Types of tasks for neural networks."""
+    regression = 0,
+    binary_classification = 1,
+    multiclass_classification = 2
 
 
 class Dense:
@@ -143,8 +152,14 @@ def sim_list(template_list, plotting=["loss"]):
 
 def grid_search(f, lists, xlabel, ylabel, sorted_count=0, plot_enabled=True):
     # list of properties to print
-    prop_lst = ["name", "train_accuracy", "val_accuracy", "overfitting"]
-    prop_aliases = ["name", "ta", "va", "of"]
+    prop_lst = None
+    prop_aliases = None
+    if global_data.model_settings.task_type == TaskTypes.regression:
+        prop_lst = ["name", "train_loss", "val_loss", "overfitting"]
+        prop_aliases = ["name", "tl", "vl", "of"]
+    else:
+        prop_lst = ["name", "train_accuracy", "val_accuracy", "overfitting"]
+        prop_aliases = ["name", "ta", "va", "of"]
     # creating simulations
     create_grid(lists, f)
     # running simulations
@@ -240,8 +255,9 @@ class Simulation:
         val_predict = np.round(self.model.predict(val_X))
         self.train_loss = mean_absolute_error(train_y, train_predict)
         self.val_loss = mean_absolute_error(val_y, val_predict)
-        self.train_accuracy = accuracy_score(train_y, train_predict)
-        self.val_accuracy = accuracy_score(val_y, val_predict)
+        if global_data.model_settings.task_type != TaskTypes.regression:
+            self.train_accuracy = accuracy_score(train_y, train_predict)
+            self.val_accuracy = accuracy_score(val_y, val_predict)
         self.overfitting = self.val_loss - self.train_loss
         # saving
         self.model.save(f"models/{self.id}")

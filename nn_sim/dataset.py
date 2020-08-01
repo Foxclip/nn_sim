@@ -19,8 +19,8 @@ from sklearn.model_selection import train_test_split
 import keras
 import numpy as np
 from nn_sim import simulation
+from nn_sim.simulation import TaskTypes
 import shutil
-import enum
 import pandas as pd
 import os
 
@@ -33,20 +33,6 @@ class DataSplit:
         self.train_y = train_y
         self.val_y = val_y
         self.colcount = colcount
-
-
-class ColNames:
-    """Stores column names in one place."""
-    def __init__(self):
-        self.target_col = None
-        self.test_id = None  # leftmost column in final output on test dataset
-
-
-class TaskTypes(enum.Enum):
-    """Types of tasks for neural networks."""
-    regression = 0,
-    binary_classification = 1,
-    multiclass_classification = 2
 
 
 class ModelSettings:
@@ -127,6 +113,7 @@ def nn_grid(data_split, model_settings, layers_lst, neurons_lst):
     simulation.init()
     # loading data to simulation module
     simulation.global_data.data_split = data_split
+    simulation.global_data.model_settings = model_settings
 
     # deciding activations and loss functions based on task type
     last_activation = None
@@ -181,15 +168,15 @@ def nn_grid(data_split, model_settings, layers_lst, neurons_lst):
     )
 
 
-def cut_dataset(X, colnames):
+def cut_dataset(X, target_col):
     """Cuts dataset into train, test and y parts."""
     # this has to be done since test rows are here too, and in test dataset
     # target values are missing
-    X_train = X.dropna(subset=[colnames.target_col])
-    y_train = X_train[colnames.target_col]
-    X_train = drop(X_train, colnames.target_col)
-    X_test = X[X[colnames.target_col].isnull()]
-    X_test = drop(X_test, colnames.target_col)
+    X_train = X.dropna(subset=[target_col])
+    y_train = X_train[target_col]
+    X_train = drop(X_train, target_col)
+    X_test = X[X[target_col].isnull()]
+    X_test = drop(X_test, target_col)
     return X_train, X_test, y_train
 
 
@@ -206,39 +193,27 @@ def clear_folder(folder):
             print('Failed to delete %s. Reason: %s' % (file_path, e))
 
 
-def load_data(colnames, f):
-    # loading CSV
-    train_df = pd.read_csv("train.csv")
-    test_df = pd.read_csv("test.csv")
-    df = pd.concat([train_df, test_df], ignore_index=True, sort=False)
-    # applying externally defined transformations (feature engineering and
-    # encoding)
-    df = f(df)
+def split_data(df, target_col=None):
     # preparing data
-    X_train, X_test, y_train = cut_dataset(df, colnames)
+    X_train, X_test, y_train = cut_dataset(df, target_col)
     train_X, val_X, train_y, val_y = train_test_split(X_train, y_train)
     data_split = DataSplit(train_X, val_X, train_y, val_y, train_X.shape[1])
     return data_split, X_test
 
 
-def train_models(data_split, layers_lst, neurons_lst, epochs):
+def train_models(data_split, model_settings, layers_lst, neurons_lst):
     """Train models and save them."""
     # deleting saved models
     clear_folder("models")
     # training models
-    nn_grid(data_split, layers_lst, neurons_lst, epochs)
+    nn_grid(data_split, model_settings, layers_lst, neurons_lst)
 
 
-def make_predictions(X_test, colnames):
+def make_predictions(X):
     """Make predictions with the best model."""
     print("Making predictions...")
-    # loading test CSV
-    df = pd.read_csv("test.csv")
     # loading best model
     best_model = keras.models.load_model("best_model")
     # making predictions
-    predict = np.round(best_model.predict(X_test))
-    df = df[[colnames.test_id]]
-    df[colnames.target_col] = predict
-    df[colnames.target_col] = df[colnames.target_col].astype(int)
-    df.to_csv("output.csv", index=False)
+    predict = np.round(best_model.predict(X))
+    return predict
