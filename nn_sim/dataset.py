@@ -50,6 +50,7 @@ class NeuralNetworkSettings(ModelSettings):
         self.optimizer = "Adam"
         self.batch_size = 10
         self.epochs = 100
+        self.loss = "val"
 
 
 def fillna(df, column_list, value="missing"):

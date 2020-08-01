@@ -115,7 +115,11 @@ def run_all(p_prop_list=[], p_prop_aliases=[], jobs=None):
         for sim in simulations:
             _run_simulation(sim)
     # choosing and saving best model
-    losses = [sim.val_loss for sim in simulations]
+    losses = None
+    if global_data.model_settings.loss == "train":
+        losses = [sim.train_loss for sim in simulations]
+    elif global_data.model_settings.loss == "val":
+        losses = [sim.val_loss for sim in simulations]
     min_id = np.argmin(losses)
     if os.path.exists("best_model"):
         shutil.rmtree("best_model")
@@ -166,7 +170,10 @@ def grid_search(f, lists, xlabel, ylabel, sorted_count=0, plot_enabled=True):
     run_all(prop_lst, prop_aliases, jobs=None)
     # printing results
     simulations_copy = simulations.copy()
-    simulations_copy.sort(key=lambda x: x.val_loss)
+    if global_data.model_settings.loss == "train":
+        simulations_copy.sort(key=lambda x: x.train_loss)
+    elif global_data.model_settings.loss == "val":
+        simulations_copy.sort(key=lambda x: x.val_loss)
     print("==============================================")
     for sim in simulations_copy[:sorted_count]:
         sim.print_props(prop_lst, prop_aliases)
