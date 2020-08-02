@@ -28,7 +28,8 @@ import os
 class ModelSettings:
     """Stores settings of model."""
     def __init__(self):
-        self.cross_validation = True
+        self.folds = None
+        self.target_col = None
 
 
 class NeuralNetworkSettings(ModelSettings):
@@ -104,8 +105,8 @@ def nn_grid(data, model_settings, layers_lst, neurons_lst):
     simulation.init()
     # loading data to simulation module
     simulation.global_data.full_data = data
-    simulation.global_data.folds = get_folds(data, model_settings.folds)
     simulation.global_data.model_settings = model_settings
+    simulation.global_data.folds = get_folds(data, model_settings.folds)
 
     # deciding activations and loss functions based on task type
     last_activation = None
@@ -185,8 +186,16 @@ def clear_folder(folder):
 
 def get_folds(df, foldcount, target_col=None):
     # preparing data
-    kfold = KFold(n_splits=foldcount, shuffle=True, random_state=7)
-    folds = list(kfold.split(df))
+    kfold = None
+    folds = None
+    if simulation.global_data.model_settings.task_type != TaskTypes.regression:
+        kfold = StratifiedKFold(n_splits=foldcount, shuffle=True,
+                                random_state=7)
+        target_col = simulation.global_data.model_settings.target_col
+        folds = list(kfold.split(df, df[target_col]))
+    else:
+        kfold = KFold(n_splits=foldcount, shuffle=True, random_state=7)
+        folds = list(kfold.split(df))
     return folds
 
 

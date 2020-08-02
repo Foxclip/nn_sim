@@ -116,7 +116,7 @@ def run_all(p_prop_list=[], p_prop_aliases=[], jobs=None):
         for sim in simulations:
             _run_simulation(sim)
     # choosing and saving best model
-    losses = [sim.cv_score for sim in simulations]
+    losses = [sim.cv_loss for sim in simulations]
     min_id = np.argmin(losses)
     if os.path.exists("best_model"):
         shutil.rmtree("best_model")
@@ -153,15 +153,21 @@ def sim_list(template_list, plotting=["loss"]):
 
 def grid_search(f, lists, xlabel, ylabel, sorted_count=0, plot_enabled=True):
     # selecting list of properties to print
-    prop_lst = ["name", "cv_score"]
-    prop_aliases = ["name", "cv"]
+    prop_lst = None
+    prop_aliases = None
+    if global_data.model_settings.task_type == TaskTypes.regression:
+        prop_lst = ["name", "cv_loss", "final_loss"]
+        prop_aliases = ["name", "cvl", "fl"]
+    else:
+        prop_lst = ["name", "cv_acc", "final_acc"]
+        prop_aliases = ["name", "cva", "fa"]
     # creating simulations
     create_grid(lists, f)
     # running simulations
     run_all(prop_lst, prop_aliases, jobs=None)
     # printing results
     simulations_copy = simulations.copy()
-    simulations_copy.sort(key=lambda x: x.cv_score)
+    simulations_copy.sort(key=lambda x: x.cv_loss)
     print("==============================================")
     for sim in simulations_copy[:sorted_count]:
         sim.print_props(prop_lst, prop_aliases)
@@ -185,11 +191,10 @@ class Simulation:
     def __init__(self):
         self.name = "Untitled"
         self.model = None
-        self.train_loss = None
-        self.val_losss = None
-        self.train_accuracy = None
-        self.val_accuracy = None
-        self.overfitting = None
+        self.cv_loss = None
+        self.cv_acc = None
+        self.final_loss = None
+        self.final_acc = None
         self.leafcount = None
         self.template = None
 
@@ -222,6 +227,16 @@ class Simulation:
             metrics=["acc"]
         )
 
+    def create_model(self):
+        if self.template["type"] == "dt":
+            self.create_decision_tree()
+        elif self.template["type"] == "rf":
+            self.create_random_forest()
+        elif self.template["type"] == "nn":
+            self.create_neural_network()
+        else:
+            raise ValueError(f"Unknown type: {self.type}")
+
     def run_model(self, X, y):
         if self.template["type"] == "nn":
             self.model.fit(
@@ -234,22 +249,24 @@ class Simulation:
         else:
             self.model.fit(X, y)
 
+    def model_loss(self, val_X, val_y):
+        val_predict = self.model.predict(val_X)
+        score = mean_absolute_error(val_y, val_predict)
+        return score
+
+    def model_acc(self, val_X, val_y):
+        val_predict = np.round(self.model.predict(val_X))
+        score = accuracy_score(val_y, val_predict)
+        return score
+
     def run(self):
 
-        # creating models
-        if self.template["type"] == "dt":
-            self.create_decision_tree()
-        elif self.template["type"] == "rf":
-            self.create_random_forest()
-        elif self.template["type"] == "nn":
-            self.create_neural_network()
-        else:
-            raise ValueError(f"Unknown type: {self.type}")
-
         # cross validation
-        cv_scores = []
+        cv_losses = []
+        cv_accs = []
         for train_indices, val_indices in global_data.folds:
-
+            # creating models
+            self.create_model()
             # measuring loss and accuracy
             train_data = global_data.full_data.iloc[train_indices, :]
             val_data = global_data.full_data.iloc[val_indices, :]
@@ -259,16 +276,27 @@ class Simulation:
             train_y = train_data[target_col]
             val_y = val_data[target_col]
             self.run_model(train_X, train_y)
-            val_predict = None
-            score = None
-            if global_data.model_settings.task_type == TaskTypes.regression:
-                val_predict = self.model.predict(val_X)
-                score = mean_absolute_error(val_y, val_predict)
-            else:
-                val_predict = np.round(self.model.predict(val_X))
-                score = accuracy_score(val_y, val_predict)
-            cv_scores.append(score)
-        self.cv_score = np.mean(cv_scores)
+            cv_loss = self.model_loss(val_X, val_y)
+            cv_acc = self.model_acc(val_X, val_y)
+            print(f"acc: {cv_acc}")
+            cv_losses.append(cv_loss)
+            if global_data.model_settings.task_type != TaskTypes.regression:
+                cv_accs.append(cv_acc)
+        # final cv score
+        self.cv_loss = np.mean(cv_losses)
+        if global_data.model_settings.task_type != TaskTypes.regression:
+            self.cv_acc = np.mean(cv_accs)
+
+        # training on full data
+        print("Training on full data")
+        self.create_model()
+        train_X = global_data.full_data.drop([target_col], axis=1)
+        train_y = global_data.full_data[target_col]
+        self.run_model(train_X, train_y)
+        self.final_loss = self.model_loss(train_X, train_y)
+        if global_data.model_settings.task_type != TaskTypes.regression:
+            self.final_acc = self.model_acc(train_X, train_y)
+            print(f"Final train acc: {self.final_acc}")
 
         # saving
         self.model.save(f"models/{self.id}")
