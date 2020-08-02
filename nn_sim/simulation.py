@@ -25,6 +25,7 @@ class GlobalSettings:
 
 class GlobalData:
     full_data = None
+    data_split = None
     folds = None
     prop_list = []
     prop_aliases = []
@@ -37,6 +38,13 @@ class TaskTypes(enum.Enum):
     regression = 0,
     binary_classification = 1,
     multiclass_classification = 2
+
+
+class ValidationTypes(enum.Enum):
+    "Types of model validation"
+    none = 0,
+    val_split = 1,
+    cross_val = 2
 
 
 class Dense:
@@ -117,7 +125,14 @@ def run_all(p_prop_list=[], p_prop_aliases=[], jobs=None):
         for sim in simulations:
             _run_simulation(sim)
     # choosing and saving best model
-    losses = [sim.cv_loss for sim in simulations]
+    validation = global_data.model_settings.validation
+    losses = None
+    if validation == ValidationTypes.cross_val:
+        losses = [sim.cv_loss for sim in simulations]
+    elif validation == ValidationTypes.val_split:
+        losses = [sim.val_loss for sim in simulations]
+    elif validation == ValidationTypes.none:
+        losses = [sim.train_loss for sim in simulations]
     min_id = np.argmin(losses)
     if os.path.exists("best_model"):
         shutil.rmtree("best_model")
@@ -156,27 +171,40 @@ def grid_search(f, lists, xlabel, ylabel, sorted_count=0, plot_enabled=True):
     # selecting list of properties to print
     prop_lst = None
     prop_aliases = None
-    if global_data.model_settings.cross_validate:
+    if global_data.model_settings.validation == ValidationTypes.cross_val:
         if global_data.model_settings.task_type == TaskTypes.regression:
-            prop_lst = ["name", "cv_loss", "final_loss", "overfitting"]
-            prop_aliases = ["name", "cvl", "fl", "of"]
+            prop_lst = ["name", "cv_loss", "train_loss", "overfitting"]
+            prop_aliases = ["name", "cvl", "tl", "of"]
         else:
-            prop_lst = ["name", "cv_acc", "final_acc", "overfitting"]
-            prop_aliases = ["name", "cva", "fa", "of"]
-    else:
+            prop_lst = ["name", "cv_acc", "train_acc", "overfitting"]
+            prop_aliases = ["name", "cva", "ta", "of"]
+    elif global_data.model_settings.validation == ValidationTypes.val_split:
         if global_data.model_settings.task_type == TaskTypes.regression:
-            prop_lst = ["name", "final_loss"]
-            prop_aliases = ["name", "fl"]
+            prop_lst = ["name", "train_loss", "val_loss", "overfitting"]
+            prop_aliases = ["name", "tl", "vl", "of"]
         else:
-            prop_lst = ["name", "final_acc"]
-            prop_aliases = ["name", "fa"]
+            prop_lst = ["name", "train_acc", "val_acc", "overfitting"]
+            prop_aliases = ["name", "ta", "va", "of"]
+    elif global_data.model_settings.validation == ValidationTypes.none:
+        if global_data.model_settings.task_type == TaskTypes.regression:
+            prop_lst = ["name", "train_loss"]
+            prop_aliases = ["name", "tl"]
+        else:
+            prop_lst = ["name", "train_acc"]
+            prop_aliases = ["name", "ta"]
     # creating simulations
     create_grid(lists, f)
     # running simulations
     run_all(prop_lst, prop_aliases, jobs=None)
     # printing results
     simulations_copy = simulations.copy()
-    simulations_copy.sort(key=lambda x: x.cv_loss)
+    validation = global_data.model_settings.validation
+    if validation == ValidationTypes.cross_val:
+        simulations_copy.sort(key=lambda x: x.cv_loss)
+    elif validation == ValidationTypes.val_split:
+        simulations_copy.sort(key=lambda x: x.val_loss)
+    elif validation == ValidationTypes.none:
+        simulations_copy.sort(key=lambda x: x.train_loss)
     print("==============================================")
     for sim in simulations_copy[:sorted_count]:
         sim.print_props(prop_lst, prop_aliases)
@@ -202,8 +230,10 @@ class Simulation:
         self.model = None
         self.cv_loss = None
         self.cv_acc = None
-        self.final_loss = None
-        self.final_acc = None
+        self.train_loss = None
+        self.train_acc = None
+        self.val_loss = None
+        self.val_acc = None
         self.leafcount = None
         self.template = None
 
@@ -271,9 +301,11 @@ class Simulation:
     def run(self):
 
         target_col = global_data.model_settings.target_col
+        validation = global_data.model_settings.validation
+        task_type = global_data.model_settings.task_type
 
         # cross validation
-        if global_data.model_settings.cross_validate:
+        if validation == ValidationTypes.cross_val:
             cv_losses = []
             cv_accs = []
             for train_indices, val_indices in global_data.folds:
@@ -283,33 +315,60 @@ class Simulation:
                 train_data = global_data.full_data.iloc[train_indices, :]
                 val_data = global_data.full_data.iloc[val_indices, :]
                 train_X = train_data.drop([target_col], axis=1)
-                val_X = val_data.drop([target_col], axis=1)
                 train_y = train_data[target_col]
+                val_X = val_data.drop([target_col], axis=1)
                 val_y = val_data[target_col]
                 self.run_model(train_X, train_y)
                 cv_loss = self.model_loss(val_X, val_y)
                 cv_acc = self.model_acc(val_X, val_y)
                 cv_losses.append(cv_loss)
-                task_type = global_data.model_settings.task_type
+                task_type = task_type
                 if task_type != TaskTypes.regression:
                     cv_accs.append(cv_acc)
             # final cv score
             self.cv_loss = np.mean(cv_losses)
-            if global_data.model_settings.task_type != TaskTypes.regression:
+            if task_type != TaskTypes.regression:
                 self.cv_acc = np.mean(cv_accs)
 
-        # training on full data
+        # creating final model
         self.create_model()
-        train_X = global_data.full_data.drop([target_col], axis=1)
-        train_y = global_data.full_data[target_col]
-        self.run_model(train_X, train_y)
-        self.final_loss = self.model_loss(train_X, train_y)
-        if self.cv_loss:
-            self.overfitting = self.cv_loss - self.final_loss
-        if global_data.model_settings.task_type != TaskTypes.regression:
-            self.final_acc = self.model_acc(train_X, train_y)
 
-        # saving
+        # selecting data
+        train_X = None
+        train_y = None
+        val_X = None
+        val_y = None
+        if validation == ValidationTypes.val_split:
+            train_X = global_data.data_split.train_X
+            train_y = global_data.data_split.train_y
+            val_X = global_data.data_split.val_X
+            val_y = global_data.data_split.val_y
+        else:
+            train_X = global_data.full_data.drop([target_col], axis=1)
+            train_y = global_data.full_data[target_col]
+            val_X = train_X
+            val_y = train_y
+
+        # training model
+        self.run_model(train_X, train_y)
+
+        # calculating loss
+        self.train_loss = self.model_loss(train_X, train_y)
+        if validation == ValidationTypes.cross_val:
+            self.overfitting = self.cv_loss - self.train_loss
+            if task_type != TaskTypes.regression:
+                self.train_acc = self.model_acc(train_X, train_y)
+        elif validation == ValidationTypes.val_split:
+            self.val_loss = self.model_loss(val_X, val_y)
+            self.overfitting = self.val_loss - self.train_loss
+            if task_type != TaskTypes.regression:
+                self.train_acc = self.model_acc(train_X, train_y)
+                self.val_acc = self.model_acc(val_X, val_y)
+        elif validation == ValidationTypes.none:
+            if task_type != TaskTypes.regression:
+                self.train_acc = self.model_acc(train_X, train_y)
+
+        # saving model
         self.model.save(f"models/{self.id}")
         # this is needed to avoid sending model back to main thread, which
         # causes error, since keras model cannot be pickled

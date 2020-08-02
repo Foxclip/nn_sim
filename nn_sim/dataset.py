@@ -15,11 +15,11 @@ import copy
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
-from sklearn.model_selection import KFold, StratifiedKFold
+from sklearn.model_selection import KFold, StratifiedKFold, train_test_split
 import keras
 import numpy as np
 from nn_sim import simulation
-from nn_sim.simulation import TaskTypes
+from nn_sim.simulation import TaskTypes, ValidationTypes
 import shutil
 import pandas as pd
 import os
@@ -30,6 +30,15 @@ class ModelSettings:
     def __init__(self):
         self.folds = None
         self.target_col = None
+
+
+class DataSplit:
+    """Stores training and validation data that is passed to the models."""
+    def __init__(self, train_X, val_X, train_y, val_y):
+        self.train_X = train_X
+        self.val_X = val_X
+        self.train_y = train_y
+        self.val_y = val_y
 
 
 class NeuralNetworkSettings(ModelSettings):
@@ -104,9 +113,13 @@ def nn_grid(data, model_settings, layers_lst, neurons_lst):
     # starting up
     simulation.init()
     # loading data to simulation module
-    simulation.global_data.full_data = data
-    simulation.global_data.model_settings = model_settings
-    simulation.global_data.folds = get_folds(data, model_settings.folds)
+    gd = simulation.global_data
+    gd.full_data = data
+    gd.model_settings = model_settings
+    if model_settings.validation == ValidationTypes.val_split:
+        gd.data_split = split_data(data, model_settings.target_col)
+    elif model_settings.validation == ValidationTypes.cross_val:
+        gd.folds = get_folds(data, model_settings.folds)
 
     # deciding activations and loss functions based on task type
     last_activation = None
@@ -169,6 +182,15 @@ def cut_dataset(X, target_col):
     X_test = X[X[target_col].isnull()]
     X_test = drop(X_test, target_col)
     return X_train, X_test
+
+
+def split_data(df, target_col=None):
+    # preparing data
+    X = df.drop([target_col], axis=1)
+    y = df[target_col]
+    train_X, val_X, train_y, val_y = train_test_split(X, y)
+    data_split = DataSplit(train_X, val_X, train_y, val_y)
+    return data_split
 
 
 def clear_folder(folder):
