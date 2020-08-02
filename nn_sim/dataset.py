@@ -15,7 +15,7 @@ import copy
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import KFold, StratifiedKFold
 import keras
 import numpy as np
 from nn_sim import simulation
@@ -25,20 +25,10 @@ import pandas as pd
 import os
 
 
-class DataSplit:
-    """Stores training and validation data that is passed to the models."""
-    def __init__(self, train_X, val_X, train_y, val_y, colcount):
-        self.train_X = train_X
-        self.val_X = val_X
-        self.train_y = train_y
-        self.val_y = val_y
-        self.colcount = colcount
-
-
 class ModelSettings:
     """Stores settings of model."""
     def __init__(self):
-        pass
+        self.cross_validation = True
 
 
 class NeuralNetworkSettings(ModelSettings):
@@ -107,13 +97,14 @@ def scale(df, exclude_cols=[]):
     return df
 
 
-def nn_grid(data_split, model_settings, layers_lst, neurons_lst):
+def nn_grid(data, model_settings, layers_lst, neurons_lst):
     """Creates grid of simulations with neural networks and runs them."""
 
     # starting up
     simulation.init()
     # loading data to simulation module
-    simulation.global_data.data_split = data_split
+    simulation.global_data.full_data = data
+    simulation.global_data.folds = get_folds(data, model_settings.folds)
     simulation.global_data.model_settings = model_settings
 
     # deciding activations and loss functions based on task type
@@ -137,7 +128,7 @@ def nn_grid(data_split, model_settings, layers_lst, neurons_lst):
         "layers": [
             simulation.Dense(
                 units=-1,  # should be overriden later
-                input_dim=data_split.colcount,
+                input_dim=simulation.global_data.full_data.shape[1] - 1,
                 activation=model_settings.intermediate_activations
             ),
             simulation.Dense(
@@ -170,15 +161,13 @@ def nn_grid(data_split, model_settings, layers_lst, neurons_lst):
 
 
 def cut_dataset(X, target_col):
-    """Cuts dataset into train, test and y parts."""
+    """Cuts dataset into train and test parts."""
     # this has to be done since test rows are here too, and in test dataset
     # target values are missing
     X_train = X.dropna(subset=[target_col])
-    y_train = X_train[target_col]
-    X_train = drop(X_train, target_col)
     X_test = X[X[target_col].isnull()]
     X_test = drop(X_test, target_col)
-    return X_train, X_test, y_train
+    return X_train, X_test
 
 
 def clear_folder(folder):
@@ -194,20 +183,19 @@ def clear_folder(folder):
             print('Failed to delete %s. Reason: %s' % (file_path, e))
 
 
-def split_data(df, target_col=None):
+def get_folds(df, foldcount, target_col=None):
     # preparing data
-    X_train, X_test, y_train = cut_dataset(df, target_col)
-    train_X, val_X, train_y, val_y = train_test_split(X_train, y_train)
-    data_split = DataSplit(train_X, val_X, train_y, val_y, train_X.shape[1])
-    return data_split, X_test
+    kfold = KFold(n_splits=foldcount, shuffle=True, random_state=7)
+    folds = list(kfold.split(df))
+    return folds
 
 
-def train_models(data_split, model_settings, layers_lst, neurons_lst):
+def train_models(data, model_settings, layers_lst, neurons_lst):
     """Train models and save them."""
     # deleting saved models
     clear_folder("models")
     # training models
-    nn_grid(data_split, model_settings, layers_lst, neurons_lst)
+    nn_grid(data, model_settings, layers_lst, neurons_lst)
 
 
 def make_predictions(X):

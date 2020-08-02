@@ -24,7 +24,8 @@ class GlobalSettings:
 
 
 class GlobalData:
-    data_split = None
+    full_data = None
+    folds = None
     prop_list = []
     prop_aliases = []
     model_settings = None
@@ -115,11 +116,7 @@ def run_all(p_prop_list=[], p_prop_aliases=[], jobs=None):
         for sim in simulations:
             _run_simulation(sim)
     # choosing and saving best model
-    losses = None
-    if global_data.model_settings.loss == "train":
-        losses = [sim.train_loss for sim in simulations]
-    elif global_data.model_settings.loss == "val":
-        losses = [sim.val_loss for sim in simulations]
+    losses = [sim.cv_score for sim in simulations]
     min_id = np.argmin(losses)
     if os.path.exists("best_model"):
         shutil.rmtree("best_model")
@@ -155,25 +152,16 @@ def sim_list(template_list, plotting=["loss"]):
 
 
 def grid_search(f, lists, xlabel, ylabel, sorted_count=0, plot_enabled=True):
-    # list of properties to print
-    prop_lst = None
-    prop_aliases = None
-    if global_data.model_settings.task_type == TaskTypes.regression:
-        prop_lst = ["name", "train_loss", "val_loss", "overfitting"]
-        prop_aliases = ["name", "tl", "vl", "of"]
-    else:
-        prop_lst = ["name", "train_accuracy", "val_accuracy", "overfitting"]
-        prop_aliases = ["name", "ta", "va", "of"]
+    # selecting list of properties to print
+    prop_lst = ["name", "cv_score"]
+    prop_aliases = ["name", "cv"]
     # creating simulations
     create_grid(lists, f)
     # running simulations
     run_all(prop_lst, prop_aliases, jobs=None)
     # printing results
     simulations_copy = simulations.copy()
-    if global_data.model_settings.loss == "train":
-        simulations_copy.sort(key=lambda x: x.train_loss)
-    elif global_data.model_settings.loss == "val":
-        simulations_copy.sort(key=lambda x: x.val_loss)
+    simulations_copy.sort(key=lambda x: x.cv_score)
     print("==============================================")
     for sim in simulations_copy[:sorted_count]:
         sim.print_props(prop_lst, prop_aliases)
@@ -205,67 +193,83 @@ class Simulation:
         self.leafcount = None
         self.template = None
 
-    def fit_tree(self):
-        self.model.fit(
-            X=global_data.data_split.train_X,
-            y=global_data.data_split.train_y
+    def create_decision_tree(self):
+        self.model = DecisionTreeClassifier(
+            max_depth=self.template["leafcount"],
+            random_state=self.template["random_state"]
         )
 
-    def run(self):
-        # decision tree
-        if self.template["type"] == "dt":
-            self.model = DecisionTreeClassifier(
-                max_depth=self.template["leafcount"],
-                random_state=self.template["random_state"]
-            )
-            self.fit_tree()
-        # random forest
-        elif self.template["type"] == "rf":
-            self.model = RandomForestClassifier(
-                n_estimators=self.template["count"],
-                max_depth=self.template["leafcount"],
-                random_state=self.template["random_state"]
-            )
-            self.fit_tree()
-        # neural network
-        elif self.template["type"] == "nn":
-            # choosing the loss function from its short name
-            if self.template["loss"] == "bce":
-                self.template["loss"] = keras.losses.binary_crossentropy
-            elif self.template["loss"] == "cce":
-                self.template["loss"] = keras.losses.categorical_crossentropy
-            # creating model
-            self.model = keras.models.Sequential()
-            for layer in self.template["layers"]:
-                self.model.add(layer.create())
-            self.model.compile(
-                optimizer=self.template["optimizer"],
-                loss=self.template["loss"],
-                metrics=["acc"]
-            )
-            # running model
+    def create_random_forest(self):
+        self.model = RandomForestClassifier(
+            n_estimators=self.template["count"],
+            max_depth=self.template["leafcount"],
+            random_state=self.template["random_state"]
+        )
+
+    def create_neural_network(self):
+        # choosing the loss function from its short name
+        if self.template["loss"] == "bce":
+            self.template["loss"] = keras.losses.binary_crossentropy
+        elif self.template["loss"] == "cce":
+            self.template["loss"] = keras.losses.categorical_crossentropy
+        # creating model
+        self.model = keras.models.Sequential()
+        for layer in self.template["layers"]:
+            self.model.add(layer.create())
+        self.model.compile(
+            optimizer=self.template["optimizer"],
+            loss=self.template["loss"],
+            metrics=["acc"]
+        )
+
+    def run_model(self, X, y):
+        if self.template["type"] == "nn":
             self.model.fit(
-                global_data.data_split.train_X,
-                global_data.data_split.train_y,
+                X,
+                y,
                 epochs=self.template["epochs"],
                 batch_size=self.template["batch_size"],
                 verbose=0
             )
         else:
+            self.model.fit(X, y)
+
+    def run(self):
+
+        # creating models
+        if self.template["type"] == "dt":
+            self.create_decision_tree()
+        elif self.template["type"] == "rf":
+            self.create_random_forest()
+        elif self.template["type"] == "nn":
+            self.create_neural_network()
+        else:
             raise ValueError(f"Unknown type: {self.type}")
-        # measuring loss and accuracy
-        train_X = global_data.data_split.train_X
-        val_X = global_data.data_split.val_X
-        train_y = global_data.data_split.train_y
-        val_y = global_data.data_split.val_y
-        train_predict = np.round(self.model.predict(train_X))
-        val_predict = np.round(self.model.predict(val_X))
-        self.train_loss = mean_absolute_error(train_y, train_predict)
-        self.val_loss = mean_absolute_error(val_y, val_predict)
-        if global_data.model_settings.task_type != TaskTypes.regression:
-            self.train_accuracy = accuracy_score(train_y, train_predict)
-            self.val_accuracy = accuracy_score(val_y, val_predict)
-        self.overfitting = self.val_loss - self.train_loss
+
+        # cross validation
+        cv_scores = []
+        for train_indices, val_indices in global_data.folds:
+
+            # measuring loss and accuracy
+            train_data = global_data.full_data.iloc[train_indices, :]
+            val_data = global_data.full_data.iloc[val_indices, :]
+            target_col = global_data.model_settings.target_col
+            train_X = train_data.drop([target_col], axis=1)
+            val_X = val_data.drop([target_col], axis=1)
+            train_y = train_data[target_col]
+            val_y = val_data[target_col]
+            self.run_model(train_X, train_y)
+            val_predict = None
+            score = None
+            if global_data.model_settings.task_type == TaskTypes.regression:
+                val_predict = self.model.predict(val_X)
+                score = mean_absolute_error(val_y, val_predict)
+            else:
+                val_predict = np.round(self.model.predict(val_X))
+                score = accuracy_score(val_y, val_predict)
+            cv_scores.append(score)
+        self.cv_score = np.mean(cv_scores)
+
         # saving
         self.model.save(f"models/{self.id}")
         # this is needed to avoid sending model back to main thread, which
