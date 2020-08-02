@@ -29,6 +29,7 @@ class GlobalData:
     prop_list = []
     prop_aliases = []
     model_settings = None
+    cross_validate = None
 
 
 class TaskTypes(enum.Enum):
@@ -155,12 +156,20 @@ def grid_search(f, lists, xlabel, ylabel, sorted_count=0, plot_enabled=True):
     # selecting list of properties to print
     prop_lst = None
     prop_aliases = None
-    if global_data.model_settings.task_type == TaskTypes.regression:
-        prop_lst = ["name", "cv_loss", "final_loss", "overfitting"]
-        prop_aliases = ["name", "cvl", "fl", "of"]
+    if global_data.model_settings.cross_validate:
+        if global_data.model_settings.task_type == TaskTypes.regression:
+            prop_lst = ["name", "cv_loss", "final_loss", "overfitting"]
+            prop_aliases = ["name", "cvl", "fl", "of"]
+        else:
+            prop_lst = ["name", "cv_acc", "final_acc", "overfitting"]
+            prop_aliases = ["name", "cva", "fa", "of"]
     else:
-        prop_lst = ["name", "cv_acc", "final_acc", "overfitting"]
-        prop_aliases = ["name", "cva", "fa", "of"]
+        if global_data.model_settings.task_type == TaskTypes.regression:
+            prop_lst = ["name", "final_loss"]
+            prop_aliases = ["name", "fl"]
+        else:
+            prop_lst = ["name", "final_acc"]
+            prop_aliases = ["name", "fa"]
     # creating simulations
     create_grid(lists, f)
     # running simulations
@@ -261,30 +270,33 @@ class Simulation:
 
     def run(self):
 
+        target_col = global_data.model_settings.target_col
+
         # cross validation
-        cv_losses = []
-        cv_accs = []
-        for train_indices, val_indices in global_data.folds:
-            # creating models
-            self.create_model()
-            # measuring loss and accuracy
-            train_data = global_data.full_data.iloc[train_indices, :]
-            val_data = global_data.full_data.iloc[val_indices, :]
-            target_col = global_data.model_settings.target_col
-            train_X = train_data.drop([target_col], axis=1)
-            val_X = val_data.drop([target_col], axis=1)
-            train_y = train_data[target_col]
-            val_y = val_data[target_col]
-            self.run_model(train_X, train_y)
-            cv_loss = self.model_loss(val_X, val_y)
-            cv_acc = self.model_acc(val_X, val_y)
-            cv_losses.append(cv_loss)
+        if global_data.model_settings.cross_validate:
+            cv_losses = []
+            cv_accs = []
+            for train_indices, val_indices in global_data.folds:
+                # creating models
+                self.create_model()
+                # measuring loss and accuracy
+                train_data = global_data.full_data.iloc[train_indices, :]
+                val_data = global_data.full_data.iloc[val_indices, :]
+                train_X = train_data.drop([target_col], axis=1)
+                val_X = val_data.drop([target_col], axis=1)
+                train_y = train_data[target_col]
+                val_y = val_data[target_col]
+                self.run_model(train_X, train_y)
+                cv_loss = self.model_loss(val_X, val_y)
+                cv_acc = self.model_acc(val_X, val_y)
+                cv_losses.append(cv_loss)
+                task_type = global_data.model_settings.task_type
+                if task_type != TaskTypes.regression:
+                    cv_accs.append(cv_acc)
+            # final cv score
+            self.cv_loss = np.mean(cv_losses)
             if global_data.model_settings.task_type != TaskTypes.regression:
-                cv_accs.append(cv_acc)
-        # final cv score
-        self.cv_loss = np.mean(cv_losses)
-        if global_data.model_settings.task_type != TaskTypes.regression:
-            self.cv_acc = np.mean(cv_accs)
+                self.cv_acc = np.mean(cv_accs)
 
         # training on full data
         self.create_model()
@@ -292,7 +304,8 @@ class Simulation:
         train_y = global_data.full_data[target_col]
         self.run_model(train_X, train_y)
         self.final_loss = self.model_loss(train_X, train_y)
-        self.overfitting = self.cv_loss - self.final_loss
+        if self.cv_loss:
+            self.overfitting = self.cv_loss - self.final_loss
         if global_data.model_settings.task_type != TaskTypes.regression:
             self.final_acc = self.model_acc(train_X, train_y)
 
