@@ -156,11 +156,11 @@ def grid_search(f, lists, xlabel, ylabel, sorted_count=0, plot_enabled=True):
     prop_lst = None
     prop_aliases = None
     if global_data.model_settings.task_type == TaskTypes.regression:
-        prop_lst = ["name", "cv_loss", "final_loss"]
-        prop_aliases = ["name", "cvl", "fl"]
+        prop_lst = ["name", "cv_loss", "final_loss", "overfitting"]
+        prop_aliases = ["name", "cvl", "fl", "of"]
     else:
-        prop_lst = ["name", "cv_acc", "final_acc"]
-        prop_aliases = ["name", "cva", "fa"]
+        prop_lst = ["name", "cv_acc", "final_acc", "overfitting"]
+        prop_aliases = ["name", "cva", "fa", "of"]
     # creating simulations
     create_grid(lists, f)
     # running simulations
@@ -278,7 +278,6 @@ class Simulation:
             self.run_model(train_X, train_y)
             cv_loss = self.model_loss(val_X, val_y)
             cv_acc = self.model_acc(val_X, val_y)
-            print(f"acc: {cv_acc}")
             cv_losses.append(cv_loss)
             if global_data.model_settings.task_type != TaskTypes.regression:
                 cv_accs.append(cv_acc)
@@ -288,15 +287,14 @@ class Simulation:
             self.cv_acc = np.mean(cv_accs)
 
         # training on full data
-        print("Training on full data")
         self.create_model()
         train_X = global_data.full_data.drop([target_col], axis=1)
         train_y = global_data.full_data[target_col]
         self.run_model(train_X, train_y)
         self.final_loss = self.model_loss(train_X, train_y)
+        self.overfitting = self.cv_loss - self.final_loss
         if global_data.model_settings.task_type != TaskTypes.regression:
             self.final_acc = self.model_acc(train_X, train_y)
-            print(f"Final train acc: {self.final_acc}")
 
         # saving
         self.model.save(f"models/{self.id}")
