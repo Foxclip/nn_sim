@@ -320,11 +320,11 @@ class Simulation:
                 val_y = val_data[target_col]
                 self.run_model(train_X, train_y)
                 cv_loss = self.model_loss(val_X, val_y)
-                cv_acc = self.model_acc(val_X, val_y)
+                if task_type != TaskTypes.regression:
+                    cv_acc = self.model_acc(val_X, val_y)
+                    cv_accs.append(cv_acc)
                 cv_losses.append(cv_loss)
                 task_type = task_type
-                if task_type != TaskTypes.regression:
-                    cv_accs.append(cv_acc)
             # final cv score
             self.cv_loss = np.mean(cv_losses)
             if task_type != TaskTypes.regression:
