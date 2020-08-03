@@ -22,6 +22,7 @@ from nn_sim import simulation
 from nn_sim.simulation import TaskTypes, ValidationTypes
 import shutil
 import pandas as pd
+import math
 import os
 
 
@@ -48,7 +49,7 @@ class NeuralNetworkSettings(ModelSettings):
         self.intermediate_activations = "relu"
         self.output_count = 1
         self.optimizer = "Adam"
-        self.batch_size = 10
+        self.batch_size = 32
         self.epochs = 100
         self.loss = "val"
 
@@ -157,12 +158,24 @@ def nn_grid(data, model_settings, layers_lst, neurons_lst):
     }
 
     def create_sim(layer_count, neuron_count):
+
         template = copy.deepcopy(main_template)
         template["layers"][0].units = neuron_count
+
+        # creating layers
         for i in range(layer_count - 1):
             new_layer = simulation.Dense(units=neuron_count, activation="relu")
             template["layers"].insert(1, new_layer)
-        template["name"] = f"HL:{layer_count:2.0f} N:{neuron_count:2.0f}"
+
+        # making pretty template name
+        layer_cnt_digits = int(math.log10(max(layers_lst))) + 1
+        neuron_cnt_digits = int(math.log10(max(neurons_lst))) + 1
+        layer_format = f"{{:{layer_cnt_digits}.0f}}"
+        neuron_format = f"{{:{neuron_cnt_digits}.0f}}"
+        layer_count_str = layer_format.format(layer_count)
+        neuron_count_str = neuron_format.format(neuron_count)
+        template["name"] = f"HL:{layer_count_str} N:{neuron_count_str}"
+
         simulation.add_from_template(template)
 
     simulation.grid_search(
