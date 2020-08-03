@@ -67,6 +67,15 @@ class Dense:
         )
 
 
+class LossHistory(keras.callbacks.Callback):
+    """Stores loss history."""
+    def on_train_begin(self, logs={}):
+        self.losses = []
+
+    def on_epoch_end(self, epoch, logs={}):
+        self.losses.append(logs.get('loss'))
+
+
 def init():
     global simulations, global_settings, global_data
     simulations = []
@@ -173,25 +182,29 @@ def grid_search(f, lists, xlabel, ylabel, sorted_count=0, plot_enabled=True):
     prop_aliases = None
     if global_data.model_settings.validation == ValidationTypes.cross_val:
         if global_data.model_settings.task_type == TaskTypes.regression:
-            prop_lst = ["name", "cv_loss", "train_loss", "overfitting"]
-            prop_aliases = ["name", "cvl", "tl", "of"]
+            prop_lst = ["name", "cv_loss", "train_loss", "overfitting",
+                        "lowest_loss_point"]
+            prop_aliases = ["name", "cvl", "tl", "of", "llp"]
         else:
-            prop_lst = ["name", "cv_acc", "train_acc", "overfitting"]
-            prop_aliases = ["name", "cva", "ta", "of"]
+            prop_lst = ["name", "cv_acc", "train_acc", "overfitting",
+                        "lowest_loss_point"]
+            prop_aliases = ["name", "cva", "ta", "of", "llp"]
     elif global_data.model_settings.validation == ValidationTypes.val_split:
         if global_data.model_settings.task_type == TaskTypes.regression:
-            prop_lst = ["name", "train_loss", "val_loss", "overfitting"]
-            prop_aliases = ["name", "tl", "vl", "of"]
+            prop_lst = ["name", "train_loss", "val_loss", "overfitting",
+                        "lowest_loss_point"]
+            prop_aliases = ["name", "tl", "vl", "of", "llp"]
         else:
-            prop_lst = ["name", "train_acc", "val_acc", "overfitting"]
-            prop_aliases = ["name", "ta", "va", "of"]
+            prop_lst = ["name", "train_acc", "val_acc", "overfitting",
+                        "lowest_loss_point"]
+            prop_aliases = ["name", "ta", "va", "of", "llp"]
     elif global_data.model_settings.validation == ValidationTypes.none:
         if global_data.model_settings.task_type == TaskTypes.regression:
-            prop_lst = ["name", "train_loss"]
-            prop_aliases = ["name", "tl"]
+            prop_lst = ["name", "train_loss", "lowest_loss_point"]
+            prop_aliases = ["name", "tl", "llp"]
         else:
-            prop_lst = ["name", "train_acc"]
-            prop_aliases = ["name", "ta"]
+            prop_lst = ["name", "train_acc", "lowest_loss_point"]
+            prop_aliases = ["name", "ta", "llp"]
     # creating simulations
     create_grid(lists, f)
     # running simulations
@@ -278,13 +291,16 @@ class Simulation:
 
     def run_model(self, X, y):
         if self.template["type"] == "nn":
+            history = LossHistory()
             self.model.fit(
                 X,
                 y,
                 epochs=self.template["epochs"],
                 batch_size=self.template["batch_size"],
-                verbose=0
+                verbose=0,
+                callbacks=[history]
             )
+            self.loss_history = history.losses
         else:
             self.model.fit(X, y)
 
@@ -367,6 +383,10 @@ class Simulation:
         elif validation == ValidationTypes.none:
             if task_type != TaskTypes.regression:
                 self.train_acc = self.model_acc(train_X, train_y)
+
+        # finding point of the lowest loss
+        lowest_loss_i = np.argmin(self.loss_history)
+        self.lowest_loss_point = lowest_loss_i / (len(self.loss_history) - 1)
 
         # saving model
         self.model.save(f"models/{self.id}")
