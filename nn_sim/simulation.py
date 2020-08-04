@@ -25,7 +25,6 @@ class GlobalSettings:
 
 class GlobalData:
     full_data = None
-    data_split = None
     folds = None
     prop_list = []
     prop_aliases = []
@@ -69,11 +68,24 @@ class Dense:
 
 class LossHistory(keras.callbacks.Callback):
     """Stores loss history."""
+    def __init__(self, val=False, acc=False):
+        self.val = val
+        self.acc = acc
+
     def on_train_begin(self, logs={}):
-        self.losses = []
+        self.train_losses = []
+        self.val_losses = []
+        self.train_accs = []
+        self.val_accs = []
 
     def on_epoch_end(self, epoch, logs={}):
-        self.losses.append(logs.get('loss'))
+        self.train_losses.append(logs.get("loss"))
+        if self.val:
+            self.val_losses.append(logs.get("val_loss"))
+        if self.acc:
+            self.train_accs.append(logs.get("acc"))
+        if self.val and self.acc:
+            self.val_accs.append(logs.get("val_acc"))
 
 
 def init():
@@ -182,29 +194,29 @@ def grid_search(f, lists, xlabel, ylabel, sorted_count=0, plot_enabled=True):
     prop_aliases = None
     if global_data.model_settings.validation == ValidationTypes.cross_val:
         if global_data.model_settings.task_type == TaskTypes.regression:
-            prop_lst = ["name", "cv_loss", "train_loss", "overfitting",
+            prop_lst = ["name", "train_loss", "cv_loss", "overfitting",
                         "lowest_loss_point"]
-            prop_aliases = ["name", "cvl", "tl", "of", "llp"]
+            prop_aliases = ["name", "tl", "cl", "of", "llp"]
         else:
-            prop_lst = ["name", "cv_acc", "train_acc", "overfitting",
-                        "lowest_loss_point"]
-            prop_aliases = ["name", "cva", "ta", "of", "llp"]
+            prop_lst = ["name", "train_acc", "cv_acc", "train_loss", "cv_loss",
+                        "overfitting", "lowest_loss_point"]
+            prop_aliases = ["name", "ta", "ca", "tl", "cl", "of", "llp"]
     elif global_data.model_settings.validation == ValidationTypes.val_split:
         if global_data.model_settings.task_type == TaskTypes.regression:
             prop_lst = ["name", "train_loss", "val_loss", "overfitting",
                         "lowest_loss_point"]
             prop_aliases = ["name", "tl", "vl", "of", "llp"]
         else:
-            prop_lst = ["name", "train_acc", "val_acc", "overfitting",
-                        "lowest_loss_point"]
-            prop_aliases = ["name", "ta", "va", "of", "llp"]
+            prop_lst = ["name", "train_acc", "val_acc", "train_loss",
+                        "val_loss", "overfitting", "lowest_loss_point"]
+            prop_aliases = ["name", "ta", "va", "tl", "vl", "of", "llp"]
     elif global_data.model_settings.validation == ValidationTypes.none:
         if global_data.model_settings.task_type == TaskTypes.regression:
             prop_lst = ["name", "train_loss", "lowest_loss_point"]
             prop_aliases = ["name", "tl", "llp"]
         else:
-            prop_lst = ["name", "train_acc", "lowest_loss_point"]
-            prop_aliases = ["name", "ta", "llp"]
+            prop_lst = ["name", "train_acc", "train_loss", "lowest_loss_point"]
+            prop_aliases = ["name", "ta", "tl", "llp"]
     # creating simulations
     create_grid(lists, f)
     # running simulations
@@ -290,8 +302,18 @@ class Simulation:
             raise ValueError(f"Unknown type: {self.type}")
 
     def run_model(self, X, y):
+
         if self.template["type"] == "nn":
-            history = LossHistory()
+
+            # shortened names
+            ms = global_data.model_settings
+            binary = ms.task_type != TaskTypes.regression
+            val_split = ms.validation == ValidationTypes.val_split
+
+            # creating loss history
+            history = LossHistory(val_split, binary)
+
+            # setting up model checkpoint
             process_name = multiprocessing.current_process().name
             filepath = f"tmp/{process_name}/checkpoint"
             model_checkpoint = keras.callbacks.ModelCheckpoint(
@@ -303,17 +325,43 @@ class Simulation:
                 mode="auto",
                 period=1
             )
+
+            # validation split ratio
+            split_ratio = 0.33 if val_split else 0.0
+
+            # training model
             self.model.fit(
                 X,
                 y,
                 epochs=self.template["epochs"],
                 batch_size=self.template["batch_size"],
+                validation_split=split_ratio,
+                shuffle=True,
                 verbose=0,
                 callbacks=[history, model_checkpoint]
             )
+
+            # loading best weights
             self.model.load_weights(filepath)
-            self.loss_history = history.losses
+
+            # calculating loss and accuracy
+            self.train_loss = history.train_losses[-1]
+            self.loss_history = history.train_losses
+            if val_split:
+                self.val_loss = history.val_losses[-1]
+                self.loss_history = history.val_losses
+            if binary:
+                self.train_acc = history.train_accs[-1]
+            if val_split and binary:
+                self.val_acc = history.val_accs[-1]
+                # print(self.val_acc)
+                # import matplotlib.pyplot as plt
+                # plt.plot(history.val_accs)
+                # plt.show()
+
         else:
+
+            # traning tree
             self.model.fit(X, y)
 
     def model_loss(self, val_X, val_y):
@@ -362,39 +410,21 @@ class Simulation:
         self.create_model()
 
         # selecting data
-        train_X = None
-        train_y = None
-        val_X = None
-        val_y = None
-        if validation == ValidationTypes.val_split:
-            train_X = global_data.data_split.train_X
-            train_y = global_data.data_split.train_y
-            val_X = global_data.data_split.val_X
-            val_y = global_data.data_split.val_y
-        else:
-            train_X = global_data.full_data.drop([target_col], axis=1)
-            train_y = global_data.full_data[target_col]
-            val_X = train_X
-            val_y = train_y
+        train_X = global_data.full_data.drop([target_col], axis=1)
+        train_y = global_data.full_data[target_col]
 
         # training model
         self.run_model(train_X, train_y)
 
-        # calculating loss
-        self.train_loss = self.model_loss(train_X, train_y)
+        # calculating overfitting measure
         if validation == ValidationTypes.cross_val:
             self.overfitting = self.cv_loss - self.train_loss
-            if task_type != TaskTypes.regression:
-                self.train_acc = self.model_acc(train_X, train_y)
         elif validation == ValidationTypes.val_split:
-            self.val_loss = self.model_loss(val_X, val_y)
             self.overfitting = self.val_loss - self.train_loss
-            if task_type != TaskTypes.regression:
-                self.train_acc = self.model_acc(train_X, train_y)
-                self.val_acc = self.model_acc(val_X, val_y)
-        elif validation == ValidationTypes.none:
-            if task_type != TaskTypes.regression:
-                self.train_acc = self.model_acc(train_X, train_y)
+        # print(self.val_loss)
+        # import matplotlib.pyplot as plt
+        # plt.plot(self.loss_history)
+        # plt.show()
 
         # finding point of the lowest loss
         lowest_loss_i = np.argmin(self.loss_history)

@@ -15,7 +15,7 @@ import copy
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
-from sklearn.model_selection import KFold, StratifiedKFold, train_test_split
+from sklearn.model_selection import KFold, StratifiedKFold
 import keras
 import numpy as np
 from nn_sim import simulation
@@ -117,9 +117,7 @@ def nn_grid(data, model_settings, layers_lst, neurons_lst):
     gd = simulation.global_data
     gd.full_data = data
     gd.model_settings = model_settings
-    if model_settings.validation == ValidationTypes.val_split:
-        gd.data_split = split_data(data, model_settings.target_col)
-    elif model_settings.validation == ValidationTypes.cross_val:
+    if model_settings.validation == ValidationTypes.cross_val:
         gd.folds = get_folds(data, model_settings.folds)
 
     # deciding activations and loss functions based on task type
@@ -195,15 +193,6 @@ def cut_dataset(X, target_col):
     X_test = X[X[target_col].isnull()]
     X_test = drop(X_test, target_col)
     return X_train, X_test
-
-
-def split_data(df, target_col=None):
-    # preparing data
-    X = df.drop([target_col], axis=1)
-    y = df[target_col]
-    train_X, val_X, train_y, val_y = train_test_split(X, y)
-    data_split = DataSplit(train_X, val_X, train_y, val_y)
-    return data_split
 
 
 def clear_folder(folder):
