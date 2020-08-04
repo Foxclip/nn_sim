@@ -66,28 +66,6 @@ class Dense:
         )
 
 
-class LossHistory(keras.callbacks.Callback):
-    """Stores loss history."""
-    def __init__(self, val=False, acc=False):
-        self.val = val
-        self.acc = acc
-
-    def on_train_begin(self, logs={}):
-        self.train_losses = []
-        self.val_losses = []
-        self.train_accs = []
-        self.val_accs = []
-
-    def on_epoch_end(self, epoch, logs={}):
-        self.train_losses.append(logs.get("loss"))
-        if self.val:
-            self.val_losses.append(logs.get("val_loss"))
-        if self.acc:
-            self.train_accs.append(logs.get("acc"))
-        if self.val and self.acc:
-            self.val_accs.append(logs.get("val_acc"))
-
-
 def init():
     global simulations, global_settings, global_data
     simulations = []
@@ -309,16 +287,14 @@ class Simulation:
             ms = global_data.model_settings
             binary = ms.task_type != TaskTypes.regression
             val_split = ms.validation == ValidationTypes.val_split
-
-            # creating loss history
-            history = LossHistory(val_split, binary)
+            monitor = "val_loss" if val_split else "loss"
 
             # setting up model checkpoint
             process_name = multiprocessing.current_process().name
             filepath = f"tmp/{process_name}/checkpoint"
             model_checkpoint = keras.callbacks.ModelCheckpoint(
                 filepath=filepath,
-                monitor="loss",
+                monitor=monitor,
                 verbose=0,
                 save_best_only=True,
                 save_weights_only=True,
@@ -330,7 +306,7 @@ class Simulation:
             split_ratio = 0.33 if val_split else 0.0
 
             # training model
-            self.model.fit(
+            history = self.model.fit(
                 X,
                 y,
                 epochs=self.template["epochs"],
@@ -338,26 +314,23 @@ class Simulation:
                 validation_split=split_ratio,
                 shuffle=True,
                 verbose=0,
-                callbacks=[history, model_checkpoint]
+                callbacks=[model_checkpoint]
             )
+            history = history.history
 
             # loading best weights
             self.model.load_weights(filepath)
 
             # calculating loss and accuracy
-            self.train_loss = history.train_losses[-1]
-            self.loss_history = history.train_losses
+            best_epoch = np.argmin(history[monitor])
+            self.train_loss = history["loss"][best_epoch]
             if val_split:
-                self.val_loss = history.val_losses[-1]
-                self.loss_history = history.val_losses
+                self.val_loss = history["val_loss"][best_epoch]
             if binary:
-                self.train_acc = history.train_accs[-1]
+                self.train_acc = history["acc"][best_epoch]
             if val_split and binary:
-                self.val_acc = history.val_accs[-1]
-                # print(self.val_acc)
-                # import matplotlib.pyplot as plt
-                # plt.plot(history.val_accs)
-                # plt.show()
+                self.val_acc = history["val_acc"][best_epoch]
+            self.lowest_loss_point = best_epoch
 
         else:
 
@@ -421,14 +394,6 @@ class Simulation:
             self.overfitting = self.cv_loss - self.train_loss
         elif validation == ValidationTypes.val_split:
             self.overfitting = self.val_loss - self.train_loss
-        # print(self.val_loss)
-        # import matplotlib.pyplot as plt
-        # plt.plot(self.loss_history)
-        # plt.show()
-
-        # finding point of the lowest loss
-        lowest_loss_i = np.argmin(self.loss_history)
-        self.lowest_loss_point = lowest_loss_i / (len(self.loss_history) - 1)
 
         # saving model
         self.model.save(f"models/{self.id}")
