@@ -292,14 +292,26 @@ class Simulation:
     def run_model(self, X, y):
         if self.template["type"] == "nn":
             history = LossHistory()
+            process_name = multiprocessing.current_process().name
+            filepath = f"tmp/{process_name}/checkpoint"
+            model_checkpoint = keras.callbacks.ModelCheckpoint(
+                filepath=filepath,
+                monitor="loss",
+                verbose=0,
+                save_best_only=True,
+                save_weights_only=True,
+                mode="auto",
+                period=1
+            )
             self.model.fit(
                 X,
                 y,
                 epochs=self.template["epochs"],
                 batch_size=self.template["batch_size"],
                 verbose=0,
-                callbacks=[history]
+                callbacks=[history, model_checkpoint]
             )
+            self.model.load_weights(filepath)
             self.loss_history = history.losses
         else:
             self.model.fit(X, y)
