@@ -307,18 +307,21 @@ class Simulation:
             monitor = "val_loss" if val_split else "loss"
 
             # setting up model checkpoint
-            process_name = multiprocessing.current_process().name
-            filepath = f"tmp/{process_name}/checkpoint"
-            from keras.callbacks import ModelCheckpoint
-            model_checkpoint = ModelCheckpoint(
-                filepath=filepath,
-                monitor=monitor,
-                verbose=0,
-                save_best_only=True,
-                save_weights_only=True,
-                mode="auto",
-                period=1
-            )
+            callbacks = []
+            if ms.checkpoint:
+                process_name = multiprocessing.current_process().name
+                filepath = f"tmp/{process_name}/checkpoint"
+                from keras.callbacks import ModelCheckpoint
+                model_checkpoint = ModelCheckpoint(
+                    filepath=filepath,
+                    monitor=monitor,
+                    verbose=0,
+                    save_best_only=True,
+                    save_weights_only=True,
+                    mode="auto",
+                    period=1
+                )
+                callbacks.append(model_checkpoint)
 
             # validation split ratio
             split_ratio = 0.33 if val_split else 0.0
@@ -332,12 +335,13 @@ class Simulation:
                 validation_split=split_ratio,
                 shuffle=True,
                 verbose=0,
-                callbacks=[model_checkpoint]
+                callbacks=callbacks
             )
             history = history.history
 
             # loading best weights
-            self.model.load_weights(filepath)
+            if ms.checkpoint:
+                self.model.load_weights(filepath)
 
             # calculating loss and accuracy
             best_epoch = np.argmin(history[monitor])
