@@ -197,6 +197,8 @@ def cut_dataset(X, target_col):
 
 def clear_folder(folder):
     """Deletes contents of a folder."""
+    if not os.path.exists(folder):
+        return
     for filename in os.listdir(folder):
         file_path = os.path.join(folder, filename)
         try:
