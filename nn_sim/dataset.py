@@ -1,22 +1,8 @@
-# switching between CPU and GPU
-import os
-CPU_MODE = True
-if CPU_MODE:
-    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-# disabling tensorflow debug messages
-DISABLE_ALL_TENSORFLOW_MESSAGES = True
-if DISABLE_ALL_TENSORFLOW_MESSAGES:
-    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-import tensorflow as tf
-tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
-
 import copy
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
 from sklearn.model_selection import KFold, StratifiedKFold
-import keras
 import numpy as np
 from nn_sim import simulation
 from nn_sim.simulation import TaskTypes, ValidationTypes
@@ -119,6 +105,9 @@ def nn_grid(data, model_settings, layers_lst, neurons_lst):
     gd.model_settings = model_settings
     if model_settings.validation == ValidationTypes.cross_val:
         gd.folds = get_folds(data, model_settings.folds)
+    gs = simulation.global_settings
+    gs.gpu = model_settings.gpu
+    gs.tensorflow_messages = False
 
     # deciding activations and loss functions based on task type
     last_activation = None
@@ -225,7 +214,7 @@ def get_folds(df, foldcount, target_col=None):
     return folds
 
 
-def train_models(data, model_settings, layers_lst, neurons_lst):
+def train_models(data, model_settings, layers_lst, neurons_lst, gpu=True):
     """Train models and save them."""
     # deleting saved models
     clear_folder("models")
@@ -237,7 +226,8 @@ def make_predictions(X):
     """Make predictions with the best model."""
     print("Making predictions...")
     # loading best model
-    best_model = keras.models.load_model("best_model")
+    from keras.models import load_model
+    best_model = load_model("best_model")
     # making predictions
     predict = best_model.predict(X)
     return predict

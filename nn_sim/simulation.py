@@ -1,9 +1,7 @@
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import mean_absolute_error, accuracy_score
-from nn_sim.dataset import CPU_MODE
 import os
-import keras
 import numpy as np
 import shutil
 import time
@@ -20,7 +18,8 @@ network_id = 0
 
 
 class GlobalSettings:
-    pass
+    gpu = None
+    tensorflow_messages = None
 
 
 class GlobalData:
@@ -29,7 +28,6 @@ class GlobalData:
     prop_list = []
     prop_aliases = []
     model_settings = None
-    cross_validate = None
 
 
 class TaskTypes(enum.Enum):
@@ -59,7 +57,8 @@ class Dense:
 
     def create(self):
         """Converts wrapper to an actual keras layer."""
-        return keras.layers.Dense(
+        from keras.layers import Dense
+        return Dense(
             units=self.units,
             input_dim=self.input_dim,
             activation=self.activation
@@ -71,6 +70,18 @@ def init():
     simulations = []
     global_data = GlobalData()
     global_settings = GlobalSettings()
+
+
+def setup():
+    # switching between CPU and GPU
+    if not global_settings.gpu:
+        os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+        os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+    # disabling tensorflow debug messages
+    if not global_settings.tensorflow_messages:
+        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+        import tensorflow as tf
+        tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 
 def add_from_template(template):
@@ -91,6 +102,7 @@ def _global_init(p_global_settings, p_global_data):
     global global_settings, global_data
     global_settings = p_global_settings
     global_data = p_global_data
+    setup()
 
 
 def _run_simulation(sim):
@@ -105,11 +117,14 @@ def run_all(p_prop_list=[], p_prop_aliases=[], jobs=None):
     # setting prop list so it will be copied between processes
     global_data.prop_list = p_prop_list
     global_data.prop_aliases = p_prop_aliases
+    # doing setup based on global settings
+    setup()
     # measuring time
     time1 = time.time()
     # running simulations
     global simulations
-    if (jobs is None or jobs > 1) and len(simulations) > 1 and CPU_MODE:
+    gpu = global_settings.gpu
+    if (jobs is None or jobs > 1) and len(simulations) > 1 and not gpu:
         # run multiple processes
         if len(simulations) < 4:
             jobs = len(simulations)
@@ -255,12 +270,14 @@ class Simulation:
 
     def create_neural_network(self):
         # choosing the loss function from its short name
+        from keras.losses import binary_crossentropy, categorical_crossentropy
         if self.template["loss"] == "bce":
-            self.template["loss"] = keras.losses.binary_crossentropy
+            self.template["loss"] = binary_crossentropy
         elif self.template["loss"] == "cce":
-            self.template["loss"] = keras.losses.categorical_crossentropy
+            self.template["loss"] = categorical_crossentropy
         # creating model
-        self.model = keras.models.Sequential()
+        from keras.models import Sequential
+        self.model = Sequential()
         for layer in self.template["layers"]:
             self.model.add(layer.create())
         self.model.compile(
@@ -292,7 +309,8 @@ class Simulation:
             # setting up model checkpoint
             process_name = multiprocessing.current_process().name
             filepath = f"tmp/{process_name}/checkpoint"
-            model_checkpoint = keras.callbacks.ModelCheckpoint(
+            from keras.callbacks import ModelCheckpoint
+            model_checkpoint = ModelCheckpoint(
                 filepath=filepath,
                 monitor=monitor,
                 verbose=0,
