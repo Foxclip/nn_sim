@@ -29,7 +29,7 @@ import os
 class ModelSettings:
     """Stores settings of model."""
     def __init__(self):
-        self.folds = None
+        self.folds = 10
         self.target_col = None
 
 
