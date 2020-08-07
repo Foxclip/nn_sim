@@ -28,6 +28,7 @@ class GlobalData:
     prop_list = []
     prop_aliases = []
     model_settings = None
+    scalers = None
 
 
 class TaskTypes(enum.Enum):
@@ -430,6 +431,12 @@ class Simulation:
             if prop_name == "name":
                 result += f"{prop_value} "
                 continue
+            gd = global_data
+            ms = gd.model_settings
+            loss_properties = ["train_loss", "val_loss", "cv_loss"]
+            if ms.unscale_loss and prop_name in loss_properties:
+                scaler = gd.scalers[ms.target_col]
+                prop_value = scaler.inverse_transform([prop_value])[0]
             if type(prop_value) in [np.float64, float]:
                 result += f"{prop_aliases[i]}:{prop_value:8.5f} "
             else:

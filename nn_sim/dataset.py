@@ -37,7 +37,7 @@ class NeuralNetworkSettings(ModelSettings):
         self.optimizer = "Adam"
         self.batch_size = 32
         self.epochs = 100
-        self.loss = "val"
+        self.unscale_loss = True
 
 
 def fillna(df, column_list, value="missing"):
@@ -99,7 +99,7 @@ def scale(df, scale_cols=[], exclude_cols=[]):
     return df, scalers
 
 
-def nn_grid(data, model_settings, layers_lst, neurons_lst):
+def nn_grid(data, scalers, model_settings, layers_lst, neurons_lst):
     """Creates grid of simulations with neural networks and runs them."""
 
     # starting up
@@ -110,6 +110,7 @@ def nn_grid(data, model_settings, layers_lst, neurons_lst):
     gd.model_settings = model_settings
     if model_settings.validation == ValidationTypes.cross_val:
         gd.folds = get_folds(data, model_settings.folds)
+    gd.scalers = scalers
     gs = simulation.global_settings
     gs.gpu = model_settings.gpu
     gs.tensorflow_messages = False
@@ -218,12 +219,12 @@ def get_folds(df, foldcount, target_col=None):
     return folds
 
 
-def train_models(data, model_settings, layers_lst, neurons_lst, gpu=True):
+def train_models(data, scalers, model_settings, layers_lst, neurons_lst):
     """Train models and save them."""
     # deleting saved models
     clear_folder("models")
     # training models
-    nn_grid(data, model_settings, layers_lst, neurons_lst)
+    nn_grid(data, scalers, model_settings, layers_lst, neurons_lst)
 
 
 def make_predictions(X, scalers):
