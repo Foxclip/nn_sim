@@ -99,6 +99,15 @@ def scale(df, scale_cols=[], exclude_cols=[]):
     return df, scalers
 
 
+def swap(df, column_list, old_value, new_value):
+    """Sets cells containing old value to new value."""
+    def swap_func(cell_value):
+        return new_value if cell_value == old_value else cell_value
+    for col in column_list:
+        df[col] = df[col].map(swap_func)
+    return df
+
+
 def nn_grid(data, scalers, model_settings, layers_lst, neurons_lst):
     """Creates grid of simulations with neural networks and runs them."""
 
