@@ -85,13 +85,18 @@ def one_hot_encode(df, column_list):
     return df_encoded
 
 
-def scale(df, exclude_cols=[]):
+def scale(df, scale_cols=[], exclude_cols=[]):
     """Scales needed columns with a StandardScaler."""
+    scalers = {}
     for col in df:
+        if scale_cols and (col not in scale_cols):
+            continue
         if col in exclude_cols:
             continue
-        df[col] = StandardScaler().fit_transform(df[[col]])
-    return df
+        scaler = StandardScaler()
+        df[col] = scaler.fit_transform(df[[col]])
+        scalers[col] = scaler
+    return df, scalers
 
 
 def nn_grid(data, model_settings, layers_lst, neurons_lst):
@@ -175,9 +180,8 @@ def nn_grid(data, model_settings, layers_lst, neurons_lst):
 
 
 def cut_dataset(X, target_col):
-    """Cuts dataset into train and test parts."""
-    # this has to be done since test rows are here too, and in test dataset
-    # target values are missing
+    """Cuts dataset into train and test parts. If value in target_col column is
+    missing, the rows goes to X_test, otherwise it goes to X_train."""
     X_train = X.dropna(subset=[target_col])
     X_test = X[X[target_col].isnull()]
     X_test = drop(X_test, target_col)
@@ -222,7 +226,7 @@ def train_models(data, model_settings, layers_lst, neurons_lst, gpu=True):
     nn_grid(data, model_settings, layers_lst, neurons_lst)
 
 
-def make_predictions(X):
+def make_predictions(X, scalers):
     """Make predictions with the best model."""
     print("Making predictions...")
     # loading best model
@@ -230,4 +234,6 @@ def make_predictions(X):
     best_model = load_model("best_model")
     # making predictions
     predict = best_model.predict(X)
+    target_col = simulation.global_data.model_settings.target_col
+    predict = scalers[target_col].inverse_transform(predict)
     return predict
