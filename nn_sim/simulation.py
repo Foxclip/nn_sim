@@ -62,13 +62,14 @@ class DataSplit:
 class ModelSettings:
     """Stores settings of model."""
     def __init__(self):
+        self.task_type = TaskTypes.binary_classification
         self.folds = 10
+        self.bin_count = 3
 
 
 class NeuralNetworkSettings(ModelSettings):
     """Stores settings of a neural network."""
     def __init__(self):
-        self.task_type = TaskTypes.binary_classification
         self.intermediate_activations = "relu"
         self.output_count = 1
         self.optimizer = "Adam"
@@ -233,19 +234,32 @@ def nn_grid(full_data, target_col, scalers, model_settings, layers_lst,
     gd = global_data
     gd.full_data = full_data
     gd.target_col = target_col
-    gd.model_settings = model_settings
-    if model_settings.validation == ValidationTypes.cross_val:
-        gd.folds = get_folds(full_data, model_settings.folds)
+    ms = model_settings
+    gd.model_settings = ms
+    if ms.validation == ValidationTypes.cross_val:
+        gd.folds = get_folds(full_data, ms.folds)
     gd.scalers = scalers
     gs = global_settings
-    gs.gpu = model_settings.gpu
+    gs.gpu = ms.gpu
     gs.tensorflow_messages = False
 
     # splitting dataset into train and val parts
-    if model_settings.validation == ValidationTypes.val_split:
+    if ms.validation == ValidationTypes.val_split:
+
         X = full_data.drop([gd.target_col], axis=1)
         y = full_data[target_col]
-        data_split = DataSplit(*train_test_split(X, y))
+
+        # bin labels for data stratification
+        bins = None
+        if ms.bin_count > 0:
+            if ms.task_type == TaskTypes.regression:
+                y_sorted = y.sort_values()
+                bins_sep = np.linspace(0, y.shape[0], ms.bin_count + 1)
+                bins = np.digitize(y_sorted.index, bins_sep)
+            else:
+                bins = y
+
+        data_split = DataSplit(*train_test_split(X, y, stratify=bins))
         gd.data_split = data_split
 
     # deciding activations and loss functions based on task type
