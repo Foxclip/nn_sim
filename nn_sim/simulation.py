@@ -190,27 +190,27 @@ def grid_search(f, lists, xlabel, ylabel, sorted_count=0, plot_enabled=True):
         if global_data.model_settings.task_type == TaskTypes.regression:
             prop_lst = ["name", "train_loss", "cv_loss", "overfitting",
                         "lowest_loss_point"]
-            prop_aliases = ["name", "tl", "cl", "of", "llp"]
+            prop_aliases = ["name", "tl", "cl", "of", "tllp"]
         else:
             prop_lst = ["name", "train_acc", "cv_acc", "train_loss", "cv_loss",
                         "overfitting", "lowest_loss_point"]
-            prop_aliases = ["name", "ta", "ca", "tl", "cl", "of", "llp"]
+            prop_aliases = ["name", "ta", "ca", "tl", "cl", "of", "tllp"]
     elif global_data.model_settings.validation == ValidationTypes.val_split:
         if global_data.model_settings.task_type == TaskTypes.regression:
             prop_lst = ["name", "train_loss", "val_loss", "overfitting",
                         "lowest_loss_point"]
-            prop_aliases = ["name", "tl", "vl", "of", "llp"]
+            prop_aliases = ["name", "tl", "vl", "of", "vllp"]
         else:
             prop_lst = ["name", "train_acc", "val_acc", "train_loss",
                         "val_loss", "overfitting", "lowest_loss_point"]
-            prop_aliases = ["name", "ta", "va", "tl", "vl", "of", "llp"]
+            prop_aliases = ["name", "ta", "va", "tl", "vl", "of", "vllp"]
     elif global_data.model_settings.validation == ValidationTypes.none:
         if global_data.model_settings.task_type == TaskTypes.regression:
             prop_lst = ["name", "train_loss", "lowest_loss_point"]
-            prop_aliases = ["name", "tl", "llp"]
+            prop_aliases = ["name", "tl", "tllp"]
         else:
             prop_lst = ["name", "train_acc", "train_loss", "lowest_loss_point"]
-            prop_aliases = ["name", "ta", "tl", "llp"]
+            prop_aliases = ["name", "ta", "tl", "tllp"]
     # creating simulations
     create_grid(lists, f)
     # running simulations
