@@ -183,34 +183,38 @@ def sim_list(template_list, plotting=["loss"]):
 
 
 def grid_search(f, lists, xlabel, ylabel, sorted_count=0, plot_enabled=True):
-    # selecting list of properties to print
+    # selecting what properties properties to print based on validation and
+    # tak type
     prop_lst = None
     prop_aliases = None
-    if global_data.model_settings.validation == ValidationTypes.cross_val:
-        if global_data.model_settings.task_type == TaskTypes.regression:
-            prop_lst = ["name", "train_loss", "cv_loss", "overfitting",
-                        "lowest_loss_point"]
-            prop_aliases = ["name", "tl", "cl", "of", "tllp"]
-        else:
-            prop_lst = ["name", "train_acc", "cv_acc", "train_loss", "cv_loss",
-                        "overfitting", "lowest_loss_point"]
-            prop_aliases = ["name", "ta", "ca", "tl", "cl", "of", "tllp"]
-    elif global_data.model_settings.validation == ValidationTypes.val_split:
-        if global_data.model_settings.task_type == TaskTypes.regression:
-            prop_lst = ["name", "train_loss", "val_loss", "overfitting",
-                        "lowest_loss_point"]
-            prop_aliases = ["name", "tl", "vl", "of", "vllp"]
-        else:
-            prop_lst = ["name", "train_acc", "val_acc", "train_loss",
-                        "val_loss", "overfitting", "lowest_loss_point"]
-            prop_aliases = ["name", "ta", "va", "tl", "vl", "of", "vllp"]
-    elif global_data.model_settings.validation == ValidationTypes.none:
-        if global_data.model_settings.task_type == TaskTypes.regression:
-            prop_lst = ["name", "train_loss", "lowest_loss_point"]
-            prop_aliases = ["name", "tl", "tllp"]
-        else:
-            prop_lst = ["name", "train_acc", "train_loss", "lowest_loss_point"]
-            prop_aliases = ["name", "ta", "tl", "tllp"]
+    validation = global_data.model_settings.validation
+    task_type = global_data.model_settings.task_type
+    no_val = validation == ValidationTypes.none
+    val_split = validation == ValidationTypes.val_split
+    cross_val = validation == ValidationTypes.cross_val
+    regression = task_type == TaskTypes.regression
+    if cross_val and regression:
+        prop_lst = ["name", "train_loss", "cv_loss", "overfitting",
+                    "lowest_loss_point"]
+        prop_aliases = ["name", "tl", "cl", "of", "tllp"]
+    if cross_val and not regression:
+        prop_lst = ["name", "train_acc", "cv_acc", "train_loss", "cv_loss",
+                    "overfitting", "lowest_loss_point"]
+        prop_aliases = ["name", "ta", "ca", "tl", "cl", "of", "tllp"]
+    if val_split and regression:
+        prop_lst = ["name", "train_loss", "val_loss", "overfitting",
+                    "lowest_loss_point"]
+        prop_aliases = ["name", "tl", "vl", "of", "vllp"]
+    if val_split and not regression:
+        prop_lst = ["name", "train_acc", "val_acc", "train_loss",
+                    "val_loss", "overfitting", "lowest_loss_point"]
+        prop_aliases = ["name", "ta", "va", "tl", "vl", "of", "vllp"]
+    if no_val and regression:
+        prop_lst = ["name", "train_loss", "lowest_loss_point"]
+        prop_aliases = ["name", "tl", "tllp"]
+    if no_val and not regression:
+        prop_lst = ["name", "train_acc", "train_loss", "lowest_loss_point"]
+        prop_aliases = ["name", "ta", "tl", "tllp"]
     # creating simulations
     create_grid(lists, f)
     # running simulations
