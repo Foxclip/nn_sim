@@ -140,14 +140,7 @@ def run_all(p_prop_list=[], p_prop_aliases=[], jobs=None):
         for sim in simulations:
             _run_simulation(sim)
     # choosing and saving best model
-    validation = global_data.model_settings.validation
-    losses = None
-    if validation == ValidationTypes.cross_val:
-        losses = [sim.cv_loss for sim in simulations]
-    elif validation == ValidationTypes.val_split:
-        losses = [sim.val_loss for sim in simulations]
-    elif validation == ValidationTypes.none:
-        losses = [sim.train_loss for sim in simulations]
+    losses = [sim.main_loss for sim in simulations]
     min_id = np.argmin(losses)
     if os.path.exists("best_model"):
         shutil.rmtree("best_model")
@@ -221,13 +214,7 @@ def grid_search(f, lists, xlabel, ylabel, sorted_count=0, plot_enabled=True):
     run_all(prop_lst, prop_aliases, jobs=None)
     # printing results
     simulations_copy = simulations.copy()
-    validation = global_data.model_settings.validation
-    if validation == ValidationTypes.cross_val:
-        simulations_copy.sort(key=lambda x: x.cv_loss)
-    elif validation == ValidationTypes.val_split:
-        simulations_copy.sort(key=lambda x: x.val_loss)
-    elif validation == ValidationTypes.none:
-        simulations_copy.sort(key=lambda x: x.train_loss)
+    simulations_copy.sort(key=lambda x: x.main_loss)
     print("==============================================")
     for sim in simulations_copy[:sorted_count]:
         sim.print_props(prop_lst, prop_aliases)
@@ -259,6 +246,7 @@ class Simulation:
         self.val_acc = None
         self.leafcount = None
         self.template = None
+        self.main_loss = None
 
     def create_decision_tree(self):
         self.model = DecisionTreeClassifier(
@@ -416,11 +404,17 @@ class Simulation:
         # training model
         self.run_model(train_X, train_y)
 
-        # calculating overfitting measure
+        # setting main loss
         if validation == ValidationTypes.cross_val:
-            self.overfitting = self.cv_loss - self.train_loss
+            self.main_loss = self.cv_loss
         elif validation == ValidationTypes.val_split:
-            self.overfitting = self.val_loss - self.train_loss
+            self.main_loss = self.val_loss
+        elif validation == ValidationTypes.none:
+            self.main_loss = self.train_loss
+
+        # calculating overfitting measure
+        if validation != ValidationTypes.none:
+            self.overfitting = self.main_loss - self.train_loss
 
         # saving model
         self.model.save(f"models/{self.id}")
