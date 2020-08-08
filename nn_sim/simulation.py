@@ -340,12 +340,12 @@ def grid_search(f, lists, xlabel, ylabel, sorted_count=0, plot_enabled=True):
     regression = task_type == TaskTypes.regression
     if cross_val and regression:
         prop_lst = ["name", "train_loss", "cv_loss", "overfitting",
-                    "lowest_loss_point"]
-        prop_aliases = ["name", "tl", "cl", "of", "tllp"]
+                    "lowest_loss_point", "cv_llp"]
+        prop_aliases = ["name", "tl", "cl", "of", "tllp", "cvllp"]
     if cross_val and not regression:
         prop_lst = ["name", "train_acc", "cv_acc", "train_loss", "cv_loss",
-                    "overfitting", "lowest_loss_point"]
-        prop_aliases = ["name", "ta", "ca", "tl", "cl", "of", "tllp"]
+                    "overfitting", "lowest_loss_point", "cv_llp"]
+        prop_aliases = ["name", "ta", "ca", "tl", "cl", "of", "tllp", "cvllp"]
     if val_split and regression:
         prop_lst = ["name", "train_loss", "val_loss", "overfitting",
                     "lowest_loss_point"]
@@ -391,6 +391,7 @@ class Simulation:
         self.name = "Untitled"
         self.model = None
         self.cv_loss = None
+        self.cv_llp = None
         self.cv_acc = None
         self.train_loss = None
         self.train_acc = None
@@ -441,7 +442,7 @@ class Simulation:
         else:
             raise ValueError(f"Unknown type: {self.type}")
 
-    def run_model(self, X, y, val_X=None):
+    def run_model(self, X, y, val_data=None):
 
         if self.template["type"] == "nn":
 
@@ -449,6 +450,7 @@ class Simulation:
             ms = global_data.model_settings
             binary = ms.task_type != TaskTypes.regression
             val_split = ms.validation == ValidationTypes.val_split
+            cross_val = ms.validation == ValidationTypes.cross_val
             monitor = "val_loss" if val_split else "loss"
 
             # setting up model checkpoint
@@ -474,7 +476,7 @@ class Simulation:
                 y,
                 epochs=self.template["epochs"],
                 batch_size=self.template["batch_size"],
-                validation_data=val_X,
+                validation_data=val_data,
                 shuffle=True,
                 verbose=0,
                 callbacks=callbacks
@@ -488,7 +490,7 @@ class Simulation:
             # calculating loss and accuracy
             best_epoch = np.argmin(history[monitor])
             self.train_loss = history["loss"][best_epoch]
-            if val_split:
+            if val_split or cross_val:
                 self.val_loss = history["val_loss"][best_epoch]
             if binary:
                 self.train_acc = history["acc"][best_epoch]
@@ -522,6 +524,7 @@ class Simulation:
         if validation == ValidationTypes.cross_val:
             cv_losses = []
             cv_accs = []
+            cv_llps = []
             for train_indices, val_indices in gd.folds:
                 # creating models
                 self.create_model()
@@ -532,15 +535,18 @@ class Simulation:
                 train_y = train_data[target_col]
                 val_X = val_data.drop([target_col], axis=1)
                 val_y = val_data[target_col]
-                self.run_model(train_X, train_y)
-                cv_loss = self.model_loss(val_X, val_y)
+                self.run_model(train_X, train_y, val_data=(val_X, val_y))
+                cv_loss = self.val_loss
+                cv_losses.append(cv_loss)
+                cv_llp = self.lowest_loss_point
+                cv_llps.append(cv_llp)
                 if task_type != TaskTypes.regression:
                     cv_acc = self.model_acc(val_X, val_y)
                     cv_accs.append(cv_acc)
-                cv_losses.append(cv_loss)
                 task_type = task_type
             # final cv score
             self.cv_loss = np.mean(cv_losses)
+            self.cv_llp = np.mean(cv_llps)
             if task_type != TaskTypes.regression:
                 self.cv_acc = np.mean(cv_accs)
             self.main_loss = self.cv_loss
@@ -583,7 +589,14 @@ class Simulation:
                 scaler = gd.scalers[gd.target_col]
                 prop_value = scaler.inverse_transform([prop_value])[0]
             if type(prop_value) in [np.float64, float]:
-                result += f"{prop_aliases[i]}:{prop_value:8.5f} "
+                d_before = 8
+                d_after = 5
+                if prop_name == "cv_llp":
+                    d_before = 4
+                    d_after = 1
+                value_format_str = f"{{0:{d_before}.{d_after}f}}"
+                value_str = value_format_str.format(prop_value)
+                result += f"{prop_aliases[i]}:{value_str} "
             else:
                 result += f"{prop_aliases[i]}:{prop_value} "
         return result
