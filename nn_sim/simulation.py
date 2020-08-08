@@ -1,7 +1,7 @@
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import mean_absolute_error, accuracy_score
-from sklearn.model_selection import KFold, StratifiedKFold
+from sklearn.model_selection import KFold, StratifiedKFold, train_test_split
 import os
 import numpy as np
 import shutil
@@ -27,6 +27,7 @@ class GlobalSettings:
 
 class GlobalData:
     full_data = None
+    data_split = None
     target_col = None
     folds = None
     prop_list = []
@@ -51,7 +52,7 @@ class ValidationTypes(enum.Enum):
 
 class DataSplit:
     """Stores training and validation data that is passed to the models."""
-    def __init__(self, train_X, val_X, train_y, val_y):
+    def __init__(self, train_X=None, val_X=None, train_y=None, val_y=None):
         self.train_X = train_X
         self.val_X = val_X
         self.train_y = train_y
@@ -222,7 +223,7 @@ def get_folds(df, foldcount):
     return folds
 
 
-def nn_grid(data, target_col, scalers, model_settings, layers_lst,
+def nn_grid(full_data, target_col, scalers, model_settings, layers_lst,
             neurons_lst):
     """Creates grid of simulations with neural networks and runs them."""
 
@@ -230,15 +231,22 @@ def nn_grid(data, target_col, scalers, model_settings, layers_lst,
     init()
     # loading data to simulation module
     gd = global_data
-    gd.full_data = data
+    gd.full_data = full_data
     gd.target_col = target_col
     gd.model_settings = model_settings
     if model_settings.validation == ValidationTypes.cross_val:
-        gd.folds = get_folds(data, model_settings.folds)
+        gd.folds = get_folds(full_data, model_settings.folds)
     gd.scalers = scalers
     gs = global_settings
     gs.gpu = model_settings.gpu
     gs.tensorflow_messages = False
+
+    # splitting dataset into train and val parts
+    if model_settings.validation == ValidationTypes.val_split:
+        X = full_data.drop([gd.target_col], axis=1)
+        y = full_data[target_col]
+        data_split = DataSplit(*train_test_split(X, y))
+        gd.data_split = data_split
 
     # deciding activations and loss functions based on task type
     last_activation = None
@@ -419,7 +427,7 @@ class Simulation:
         else:
             raise ValueError(f"Unknown type: {self.type}")
 
-    def run_model(self, X, y):
+    def run_model(self, X, y, val_X=None):
 
         if self.template["type"] == "nn":
 
@@ -446,16 +454,13 @@ class Simulation:
                 )
                 callbacks.append(model_checkpoint)
 
-            # validation split ratio
-            split_ratio = 0.33 if val_split else 0.0
-
             # training model
             history = self.model.fit(
                 X,
                 y,
                 epochs=self.template["epochs"],
                 batch_size=self.template["batch_size"],
-                validation_split=split_ratio,
+                validation_data=val_X,
                 shuffle=True,
                 verbose=0,
                 callbacks=callbacks
@@ -494,20 +499,21 @@ class Simulation:
 
     def run(self):
 
-        target_col = global_data.target_col
-        validation = global_data.model_settings.validation
-        task_type = global_data.model_settings.task_type
+        gd = global_data
+        target_col = gd.target_col
+        validation = gd.model_settings.validation
+        task_type = gd.model_settings.task_type
 
         # cross validation
         if validation == ValidationTypes.cross_val:
             cv_losses = []
             cv_accs = []
-            for train_indices, val_indices in global_data.folds:
+            for train_indices, val_indices in gd.folds:
                 # creating models
                 self.create_model()
                 # measuring loss and accuracy
-                train_data = global_data.full_data.iloc[train_indices, :]
-                val_data = global_data.full_data.iloc[val_indices, :]
+                train_data = gd.full_data.iloc[train_indices, :]
+                val_data = gd.full_data.iloc[val_indices, :]
                 train_X = train_data.drop([target_col], axis=1)
                 train_y = train_data[target_col]
                 val_X = val_data.drop([target_col], axis=1)
@@ -523,28 +529,26 @@ class Simulation:
             self.cv_loss = np.mean(cv_losses)
             if task_type != TaskTypes.regression:
                 self.cv_acc = np.mean(cv_accs)
-
-        # creating final model
-        self.create_model()
-
-        # selecting data
-        train_X = global_data.full_data.drop([target_col], axis=1)
-        train_y = global_data.full_data[target_col]
-
-        # training model
-        self.run_model(train_X, train_y)
-
-        # setting main loss
-        if validation == ValidationTypes.cross_val:
             self.main_loss = self.cv_loss
+            self.overfitting = self.cv_loss - self.train_loss
+
+        # validation split
         elif validation == ValidationTypes.val_split:
+            self.create_model()
+            ds = gd.data_split
+            val_data = (ds.val_X, ds.val_y)
+            self.run_model(ds.train_X, ds.train_y, val_data)
             self.main_loss = self.val_loss
+            self.overfitting = self.val_loss - self.train_loss
+
+        # no validation
         elif validation == ValidationTypes.none:
+            self.create_model()
+            train_X = gd.full_data.drop([target_col], axis=1)
+            train_y = gd.full_data[target_col]
+            self.run_model(train_X, train_y, val_data)
             self.main_loss = self.train_loss
 
-        # calculating overfitting measure
-        if validation != ValidationTypes.none:
-            self.overfitting = self.main_loss - self.train_loss
         # saving model
         self.model.save(f"models/{self.id}")
         # this is needed to avoid sending model back to main thread, which
