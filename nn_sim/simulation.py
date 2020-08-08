@@ -27,6 +27,7 @@ class GlobalSettings:
 
 class GlobalData:
     full_data = None
+    target_col = None
     folds = None
     prop_list = []
     prop_aliases = []
@@ -61,7 +62,6 @@ class ModelSettings:
     """Stores settings of model."""
     def __init__(self):
         self.folds = 10
-        self.target_col = None
 
 
 class NeuralNetworkSettings(ModelSettings):
@@ -206,15 +206,15 @@ def sim_list(template_list, plotting=["loss"]):
             plot.plot_loss()
 
 
-def get_folds(df, foldcount, target_col=None):
+def get_folds(df, foldcount):
     # preparing data
     kfold = None
     folds = None
+    target_col = global_data.target_col
     ms = global_data.model_settings
     if ms.task_type != TaskTypes.regression:
         kfold = StratifiedKFold(n_splits=foldcount, shuffle=True,
                                 random_state=7)
-        target_col = ms.target_col
         folds = list(kfold.split(df, df[target_col]))
     else:
         kfold = KFold(n_splits=foldcount, shuffle=True, random_state=7)
@@ -222,7 +222,8 @@ def get_folds(df, foldcount, target_col=None):
     return folds
 
 
-def nn_grid(data, scalers, model_settings, layers_lst, neurons_lst):
+def nn_grid(data, target_col, scalers, model_settings, layers_lst,
+            neurons_lst):
     """Creates grid of simulations with neural networks and runs them."""
 
     # starting up
@@ -230,6 +231,7 @@ def nn_grid(data, scalers, model_settings, layers_lst, neurons_lst):
     # loading data to simulation module
     gd = global_data
     gd.full_data = data
+    gd.target_col = target_col
     gd.model_settings = model_settings
     if model_settings.validation == ValidationTypes.cross_val:
         gd.folds = get_folds(data, model_settings.folds)
@@ -492,7 +494,7 @@ class Simulation:
 
     def run(self):
 
-        target_col = global_data.model_settings.target_col
+        target_col = global_data.target_col
         validation = global_data.model_settings.validation
         task_type = global_data.model_settings.task_type
 
@@ -543,7 +545,6 @@ class Simulation:
         # calculating overfitting measure
         if validation != ValidationTypes.none:
             self.overfitting = self.main_loss - self.train_loss
-
         # saving model
         self.model.save(f"models/{self.id}")
         # this is needed to avoid sending model back to main thread, which
@@ -561,7 +562,7 @@ class Simulation:
             ms = gd.model_settings
             loss_properties = ["train_loss", "val_loss", "cv_loss"]
             if ms.unscale_loss and prop_name in loss_properties:
-                scaler = gd.scalers[ms.target_col]
+                scaler = gd.scalers[gd.target_col]
                 prop_value = scaler.inverse_transform([prop_value])[0]
             if type(prop_value) in [np.float64, float]:
                 result += f"{prop_aliases[i]}:{prop_value:8.5f} "

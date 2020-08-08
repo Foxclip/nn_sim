@@ -8,81 +8,103 @@ import pandas as pd
 import os
 
 
-def fillna(df, column_list, value="missing"):
+loaded_dataset = None
+target_col = None
+scalers = None
+X_train = None
+X_test = None
+
+
+def fillna(column_list, value="missing"):
     """Fills missing values with 'missing'"""
+    global loaded_dataset
     for col in column_list:
-        df[col].fillna(value, inplace=True)
-    return df
+        loaded_dataset[col].fillna(value, inplace=True)
 
 
-def drop(df, column_list):
+def drop(column_list):
     """Drops columns from the dataframe."""
-    return df.drop(column_list, axis=1)
+    global loaded_dataset
+    loaded_dataset.drop(column_list, axis=1, inplace=True)
 
 
-def impute(df, column_list):
+def impute(column_list):
     """Imputes needed columns."""
+    global loaded_dataset
     for col in column_list:
-        strategy = "most_frequent" if df[col].dtype == np.object else "mean"
-        df[col] = SimpleImputer(strategy=strategy).fit_transform(df[[col]])
-    return df
+        type_object = loaded_dataset[col].dtype == np.object
+        strategy = "most_frequent" if type_object else "mean"
+        imputer = SimpleImputer(strategy=strategy)
+        loaded_dataset[col] = imputer.fit_transform(loaded_dataset[[col]])
 
 
-def label_encode(df, column_list):
+def label_encode(column_list):
     """Label encodes needed columns."""
+    global loaded_dataset
     for col in column_list:
-        df[col] = LabelEncoder().fit_transform(df[col])
-    return df
+        loaded_dataset[col] = LabelEncoder().fit_transform(loaded_dataset[col])
 
 
-def one_hot_encode(df, column_list):
+def one_hot_encode(column_list):
     """One-hot encodes needed columns."""
+    global loaded_dataset
     if not column_list:
-        return df
+        return
+    # converting to column to string type
     for col in column_list:
-        df[col] = df[col].astype(str)
+        loaded_dataset[col] = loaded_dataset[col].astype(str)
+    # creating encoded columns
     encoder = OneHotEncoder()
-    encoded = pd.DataFrame(encoder.fit_transform(df[column_list]).toarray())
+    data = loaded_dataset[column_list]
+    encoded = pd.DataFrame(encoder.fit_transform(data).toarray())
+    # creating columns titles
     categories = encoder.categories_
     for col_i in range(len(column_list)):
         categories[col_i] = column_list[col_i] + " " + categories[col_i]
     categories = np.concatenate(categories)
     encoded.columns = categories
-    df = df.drop(column_list, axis=1)
-    df_encoded = pd.concat([df, encoded], axis=1)
-    return df_encoded
+    # gluing dataset with encoded part
+    not_encoded = loaded_dataset.drop(column_list, axis=1)
+    loaded_dataset = pd.concat([not_encoded, encoded], axis=1)
 
 
-def scale(df, scale_cols=[], exclude_cols=[]):
+def scale(scale_cols=[], exclude_cols=[]):
     """Scales needed columns with a StandardScaler."""
+    global loaded_dataset
+    global scalers
     scalers = {}
-    for col in df:
+    for col in loaded_dataset:
         if scale_cols and (col not in scale_cols):
             continue
         if col in exclude_cols:
             continue
         scaler = StandardScaler()
-        df[col] = scaler.fit_transform(df[[col]])
+        loaded_dataset[col] = scaler.fit_transform(loaded_dataset[[col]])
         scalers[col] = scaler
-    return df, scalers
 
 
-def swap(df, column_list, old_value, new_value):
+def swap(column_list, old_value, new_value):
     """Sets cells containing old value to new value."""
-    def swap_func(cell_value):
+    global loaded_dataset
+    def swap_func(cell_value):  # noqa
         return new_value if cell_value == old_value else cell_value
     for col in column_list:
-        df[col] = df[col].map(swap_func)
-    return df
+        loaded_dataset[col] = loaded_dataset[col].map(swap_func)
 
 
-def cut_dataset(X, target_col):
+def leave_columns(column_list):
+    """Leaves only specified columns."""
+    global loaded_dataset
+    loaded_dataset = loaded_dataset[column_list]
+
+
+def cut_dataset():
     """Cuts dataset into train and test parts. If value in target_col column is
     missing, the rows goes to X_test, otherwise it goes to X_train."""
-    X_train = X.dropna(subset=[target_col])
-    X_test = X[X[target_col].isnull()]
-    X_test = drop(X_test, target_col)
-    return X_train, X_test
+    global X_train, X_test
+    X_train = loaded_dataset.dropna(subset=[target_col])
+    X_test = loaded_dataset[loaded_dataset[target_col].isnull()]
+    X_test = X_test.drop([target_col], axis=1)
 
 
 def clear_folder(folder):
@@ -100,22 +122,29 @@ def clear_folder(folder):
             print('Failed to delete %s. Reason: %s' % (file_path, e))
 
 
-def train_models(data, scalers, model_settings, layers_lst, neurons_lst):
+def train_models(model_settings, layers_lst, neurons_lst):
     """Train models and save them."""
+    # cutting dataset to train and test parts
+    cut_dataset()
     # deleting saved models
     clear_folder("models")
     # training models
-    simulation.nn_grid(data, scalers, model_settings, layers_lst, neurons_lst)
+    simulation.nn_grid(X_train, target_col, scalers, model_settings,
+                       layers_lst, neurons_lst)
 
 
-def make_predictions(X, scalers):
+def make_predictions():
     """Make predictions with the best model."""
     print("Making predictions...")
     # loading best model
     from keras.models import load_model
     best_model = load_model("best_model")
     # making predictions
-    predict = best_model.predict(X)
-    target_col = simulation.global_data.model_settings.target_col
+    predict = best_model.predict(X_test)
     predict = scalers[target_col].inverse_transform(predict)
     return predict
+
+
+def load_dataset(df):
+    global loaded_dataset
+    loaded_dataset = df.copy()
