@@ -1,6 +1,7 @@
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import mean_absolute_error, accuracy_score
+from sklearn.model_selection import KFold, StratifiedKFold
 import os
 import numpy as np
 import shutil
@@ -10,6 +11,8 @@ import sys
 from nn_sim import plot
 import enum
 import itertools
+import copy
+import math
 
 
 simulations = None
@@ -43,6 +46,34 @@ class ValidationTypes(enum.Enum):
     none = 0,
     val_split = 1,
     cross_val = 2
+
+
+class DataSplit:
+    """Stores training and validation data that is passed to the models."""
+    def __init__(self, train_X, val_X, train_y, val_y):
+        self.train_X = train_X
+        self.val_X = val_X
+        self.train_y = train_y
+        self.val_y = val_y
+
+
+class ModelSettings:
+    """Stores settings of model."""
+    def __init__(self):
+        self.folds = 10
+        self.target_col = None
+
+
+class NeuralNetworkSettings(ModelSettings):
+    """Stores settings of a neural network."""
+    def __init__(self):
+        self.task_type = TaskTypes.binary_classification
+        self.intermediate_activations = "relu"
+        self.output_count = 1
+        self.optimizer = "Adam"
+        self.batch_size = 32
+        self.epochs = 100
+        self.unscale_loss = True
 
 
 class Dense:
@@ -173,6 +204,103 @@ def sim_list(template_list, plotting=["loss"]):
     if "--noplot" not in sys.argv:
         if "loss" in plotting:
             plot.plot_loss()
+
+
+def get_folds(df, foldcount, target_col=None):
+    # preparing data
+    kfold = None
+    folds = None
+    ms = global_data.model_settings
+    if ms.task_type != TaskTypes.regression:
+        kfold = StratifiedKFold(n_splits=foldcount, shuffle=True,
+                                random_state=7)
+        target_col = ms.target_col
+        folds = list(kfold.split(df, df[target_col]))
+    else:
+        kfold = KFold(n_splits=foldcount, shuffle=True, random_state=7)
+        folds = list(kfold.split(df))
+    return folds
+
+
+def nn_grid(data, scalers, model_settings, layers_lst, neurons_lst):
+    """Creates grid of simulations with neural networks and runs them."""
+
+    # starting up
+    init()
+    # loading data to simulation module
+    gd = global_data
+    gd.full_data = data
+    gd.model_settings = model_settings
+    if model_settings.validation == ValidationTypes.cross_val:
+        gd.folds = get_folds(data, model_settings.folds)
+    gd.scalers = scalers
+    gs = global_settings
+    gs.gpu = model_settings.gpu
+    gs.tensorflow_messages = False
+
+    # deciding activations and loss functions based on task type
+    last_activation = None
+    loss_function = None
+    if model_settings.task_type == TaskTypes.regression:
+        last_activation = "linear"
+        loss_function = "mse"
+    elif model_settings.task_type == TaskTypes.binary_classification:
+        last_activation = "sigmoid"
+        loss_function = "bce"
+    elif model_settings.task_type == TaskTypes.multiclass_classification:
+        last_activation = "sigmoid"
+        loss_function = "cce"
+    else:
+        raise Exception(f"Unknown task type: {model_settings.task_type}")
+
+    main_template = {
+        "type": "nn",
+        "name": "Untitled",  # should be overriden later
+        "layers": [
+            Dense(
+                units=-1,  # should be overriden later
+                input_dim=gd.full_data.shape[1] - 1,
+                activation=model_settings.intermediate_activations
+            ),
+            Dense(
+                units=model_settings.output_count,
+                activation=last_activation
+            )
+        ],
+        "optimizer": model_settings.optimizer,
+        "loss": loss_function,
+        "batch_size": model_settings.batch_size,
+        "epochs": model_settings.epochs
+    }
+
+    def create_sim(layer_count, neuron_count):
+
+        template = copy.deepcopy(main_template)
+        template["layers"][0].units = neuron_count
+
+        # creating layers
+        for i in range(layer_count - 1):
+            new_layer = Dense(units=neuron_count, activation="relu")
+            template["layers"].insert(1, new_layer)
+
+        # making pretty template name
+        layer_cnt_digits = int(math.log10(max(layers_lst))) + 1
+        neuron_cnt_digits = int(math.log10(max(neurons_lst))) + 1
+        layer_format = f"{{:{layer_cnt_digits}.0f}}"
+        neuron_format = f"{{:{neuron_cnt_digits}.0f}}"
+        layer_count_str = layer_format.format(layer_count)
+        neuron_count_str = neuron_format.format(neuron_count)
+        template["name"] = f"HL:{layer_count_str} N:{neuron_count_str}"
+
+        add_from_template(template)
+
+    grid_search(
+        create_sim,
+        [layers_lst, neurons_lst],
+        "layers", "neurons",
+        sorted_count=10,
+        plot_enabled=False
+    )
 
 
 def grid_search(f, lists, xlabel, ylabel, sorted_count=0, plot_enabled=True):
