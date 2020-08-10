@@ -452,6 +452,8 @@ class Simulation:
             val_split = ms.validation == ValidationTypes.val_split
             cross_val = ms.validation == ValidationTypes.cross_val
             monitor = "val_loss" if val_split else "loss"
+            one_model = len(simulations) == 1
+            verbose = 1 if one_model else 0
 
             # setting up model checkpoint
             callbacks = []
@@ -462,7 +464,7 @@ class Simulation:
                 model_checkpoint = ModelCheckpoint(
                     filepath=filepath,
                     monitor=monitor,
-                    verbose=0,
+                    verbose=1,
                     save_best_only=True,
                     save_weights_only=True,
                     mode="auto",
@@ -475,7 +477,10 @@ class Simulation:
             patience = ms.early_stopping_patience
             if patience > 0:
                 early_stopping = EarlyStopping(
-                    monitor=monitor, mode='min', verbose=0, patience=patience
+                    monitor=monitor,
+                    mode='min',
+                    verbose=verbose,
+                    patience=patience
                 )
                 callbacks.append(early_stopping)
 
@@ -537,7 +542,7 @@ class Simulation:
             cv_val_accs = []
             cv_llps = []
             cv_ofs = []
-            for train_indices, val_indices in gd.folds:
+            for fold_i, (train_indices, val_indices) in enumerate(gd.folds):
                 # creating models
                 self.create_model()
                 # measuring loss and accuracy
@@ -555,6 +560,13 @@ class Simulation:
                 if task_type != TaskTypes.regression:
                     cv_train_accs.append(self.train_acc)
                     cv_val_accs.append(self.val_acc)
+                if len(simulations) == 1:
+                    print(
+                        f"fold:{fold_i} "
+                        f"tl:{self.train_loss:8.5f} "
+                        f"vl:{self.val_loss:8.5f} "
+                        f"of:{self.val_loss - self.train_loss:8.5f}"
+                    )
             # final cv score
             self.train_loss = np.mean(cv_train_losses)
             self.val_loss = np.mean(cv_val_losses)
