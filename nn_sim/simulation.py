@@ -588,23 +588,32 @@ class Simulation:
     def get_prop_str(self, prop_list, prop_aliases):
         result = ""
         for i, prop_name in enumerate(prop_list):
+            # getting value
             prop_value = getattr(self, prop_name)
+            # name will be displayed as just 'prop_name', not 'name: prop_name'
             if prop_name == "name":
                 result += f"{prop_value} "
                 continue
             gd = global_data
             ms = gd.model_settings
+            # unscaling loss from internal units to real units
             loss_properties = ["train_loss", "val_loss", "cv_loss"]
             if ms.unscale_loss and prop_name in loss_properties:
                 scaler = gd.scalers[gd.target_col]
                 prop_value = scaler.inverse_transform([prop_value])[0]
+            # epochs are counted from 1
+            if prop_name in ["lowest_loss_point", "cv_llp"]:
+                prop_value += 1.0
+            # formatting floats
+            d_before = 2  # 2 because of minus sign
+            d_after = 5
             if type(prop_value) in [np.float64, float]:
-                d_before = 8
-                d_after = 5
-                if prop_name == "cv_llp":
-                    d_before = 4
+                # don't need all the digits for average epoch number
+                if prop_name in ["lowest_loss_point", "cv_llp"]:
+                    d_before = int(math.log10(ms.epochs)) + 1
                     d_after = 1
-                value_format_str = f"{{0:{d_before}.{d_after}f}}"
+                d_total = d_before + d_after + 1
+                value_format_str = f"{{0:{d_total}.{d_after}f}}"
                 value_str = value_format_str.format(prop_value)
                 result += f"{prop_aliases[i]}:{value_str} "
             else:
