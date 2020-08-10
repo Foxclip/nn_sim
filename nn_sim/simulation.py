@@ -75,7 +75,8 @@ class NeuralNetworkSettings(ModelSettings):
         self.optimizer = "Adam"
         self.batch_size = 32
         self.epochs = 100
-        self.unscale_loss = True
+        self.unscale_loss = True  # show loss in real units
+        self.early_stopping_patience = 10  # 0 - early stopping disabled
 
 
 class Dense:
@@ -469,6 +470,15 @@ class Simulation:
                     period=1
                 )
                 callbacks.append(model_checkpoint)
+
+            # early stopping callback
+            from keras.callbacks import EarlyStopping
+            patience = ms.early_stopping_patience
+            if patience > 0:
+                early_stopping = EarlyStopping(
+                    monitor=monitor, mode='min', verbose=0, patience=patience
+                )
+                callbacks.append(early_stopping)
 
             # training model
             history = self.model.fit(
