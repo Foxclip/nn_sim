@@ -15,22 +15,26 @@ X_train = None
 X_test = None
 
 
+def intersect_columns(column_list):
+    return [col for col in column_list if col in loaded_dataset.columns]
+
+
 def fillna(column_list, value="missing"):
     """Fills missing values with 'missing'"""
-    global loaded_dataset
+    column_list = intersect_columns(column_list)
     for col in column_list:
         loaded_dataset[col].fillna(value, inplace=True)
 
 
 def drop(column_list):
     """Drops columns from the dataframe."""
-    global loaded_dataset
+    column_list = intersect_columns(column_list)
     loaded_dataset.drop(column_list, axis=1, inplace=True)
 
 
 def impute(column_list):
     """Imputes needed columns."""
-    global loaded_dataset
+    column_list = intersect_columns(column_list)
     for col in column_list:
         type_object = loaded_dataset[col].dtype == np.object
         strategy = "most_frequent" if type_object else "mean"
@@ -40,13 +44,14 @@ def impute(column_list):
 
 def label_encode(column_list):
     """Label encodes needed columns."""
-    global loaded_dataset
+    column_list = intersect_columns(column_list)
     for col in column_list:
         loaded_dataset[col] = LabelEncoder().fit_transform(loaded_dataset[col])
 
 
 def one_hot_encode(column_list):
     """One-hot encodes needed columns."""
+    column_list = intersect_columns(column_list)
     global loaded_dataset
     if not column_list:
         return
@@ -70,7 +75,7 @@ def one_hot_encode(column_list):
 
 def scale(scale_cols=[], exclude_cols=[]):
     """Scales needed columns with a StandardScaler."""
-    global loaded_dataset
+    scale_cols = intersect_columns(scale_cols)
     global scalers
     scalers = {}
     for col in loaded_dataset:
@@ -85,7 +90,7 @@ def scale(scale_cols=[], exclude_cols=[]):
 
 def swap(column_list, old_value, new_value):
     """Sets cells containing old value to new value."""
-    global loaded_dataset
+    column_list = intersect_columns(column_list)
     def swap_func(cell_value):  # noqa
         return new_value if cell_value == old_value else cell_value
     for col in column_list:
@@ -94,6 +99,7 @@ def swap(column_list, old_value, new_value):
 
 def leave_columns(column_list):
     """Leaves only specified columns."""
+    column_list = intersect_columns(column_list)
     global loaded_dataset
     loaded_dataset = loaded_dataset[column_list]
 
