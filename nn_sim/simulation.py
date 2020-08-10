@@ -77,6 +77,7 @@ class NeuralNetworkSettings(ModelSettings):
         self.epochs = 100
         self.unscale_loss = True  # show loss in real units
         self.early_stopping_patience = 10  # 0 - early stopping disabled
+        self.float_digits = 5  # digits after point while printing floats
 
 
 class Dense:
@@ -587,6 +588,8 @@ class Simulation:
 
     def get_prop_str(self, prop_list, prop_aliases):
         result = ""
+        gd = global_data
+        ms = gd.model_settings
         for i, prop_name in enumerate(prop_list):
             # getting value
             prop_value = getattr(self, prop_name)
@@ -594,8 +597,6 @@ class Simulation:
             if prop_name == "name":
                 result += f"{prop_value} "
                 continue
-            gd = global_data
-            ms = gd.model_settings
             # unscaling loss from internal units to real units
             loss_properties = ["train_loss", "val_loss", "cv_loss"]
             if ms.unscale_loss and prop_name in loss_properties:
@@ -606,7 +607,7 @@ class Simulation:
                 prop_value += 1.0
             # formatting floats
             d_before = 2  # 2 because of minus sign
-            d_after = 5
+            d_after = ms.float_digits
             if type(prop_value) in [np.float64, float]:
                 # don't need all the digits for average epoch number
                 if prop_name in ["lowest_loss_point", "cv_llp"]:
