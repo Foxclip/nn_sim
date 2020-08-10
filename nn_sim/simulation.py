@@ -610,7 +610,10 @@ class Simulation:
             d_after = ms.float_digits
             if type(prop_value) in [np.float64, float]:
                 # don't need all the digits for average epoch number
-                if prop_name in ["lowest_loss_point", "cv_llp"]:
+                if prop_name == "lowest_loss_point":
+                    d_before = int(math.log10(ms.epochs))
+                    d_after = 0
+                if prop_name == "cv_llp":
                     d_before = int(math.log10(ms.epochs)) + 1
                     d_after = 1
                 d_total = d_before + d_after + 1
