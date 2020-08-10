@@ -253,13 +253,13 @@ def nn_grid(full_data, target_col, scalers, model_settings, layers_lst,
 
         # bin labels for data stratification
         bins = None
-        if ms.bin_count > 0:
-            if ms.task_type == TaskTypes.regression:
+        if ms.task_type == TaskTypes.regression:
+            if ms.bin_count > 0:
                 y_sorted = y.sort_values()
                 bins_sep = np.linspace(0, y.shape[0], ms.bin_count + 1)
                 bins = np.digitize(y_sorted.index, bins_sep)
-            else:
-                bins = y
+        else:
+            bins = y
 
         data_split = DataSplit(*train_test_split(X, y, stratify=bins))
         gd.data_split = data_split
