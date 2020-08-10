@@ -341,13 +341,11 @@ def grid_search(f, lists, xlabel, ylabel, sorted_count=0, plot_enabled=True):
     cross_val = validation == ValidationTypes.cross_val
     regression = task_type == TaskTypes.regression
     if cross_val and regression:
-        prop_lst = ["name", "train_loss", "cv_loss", "overfitting",
-                    "lowest_loss_point", "cv_llp"]
-        prop_aliases = ["name", "tl", "cl", "of", "tllp", "cvllp"]
+        prop_lst = ["name", "train_loss", "val_loss", "overfitting", "cv_allp"]
+        prop_aliases = ["name", "tl", "vl", "of", "llp"]
     if cross_val and not regression:
-        prop_lst = ["name", "train_acc", "cv_acc", "train_loss", "cv_loss",
-                    "overfitting", "lowest_loss_point", "cv_llp"]
-        prop_aliases = ["name", "ta", "ca", "tl", "cl", "of", "tllp", "cvllp"]
+        prop_lst = ["name", "train_acc", "val_acc", "overfitting", "cv_allp"]
+        prop_aliases = ["name", "ta", "va", "of", "llp"]
     if val_split and regression:
         prop_lst = ["name", "train_loss", "val_loss", "overfitting",
                     "lowest_loss_point"]
@@ -393,7 +391,7 @@ class Simulation:
         self.name = "Untitled"
         self.model = None
         self.cv_loss = None
-        self.cv_llp = None
+        self.cv_allp = None
         self.cv_acc = None
         self.train_loss = None
         self.train_acc = None
@@ -505,7 +503,7 @@ class Simulation:
                 self.val_loss = history["val_loss"][best_epoch]
             if binary:
                 self.train_acc = history["acc"][best_epoch]
-            if val_split and binary:
+            if (val_split or cross_val) and binary:
                 self.val_acc = history["val_acc"][best_epoch]
             self.lowest_loss_point = best_epoch
 
@@ -533,9 +531,12 @@ class Simulation:
 
         # cross validation
         if validation == ValidationTypes.cross_val:
-            cv_losses = []
-            cv_accs = []
+            cv_train_losses = []
+            cv_val_losses = []
+            cv_train_accs = []
+            cv_val_accs = []
             cv_llps = []
+            cv_ofs = []
             for train_indices, val_indices in gd.folds:
                 # creating models
                 self.create_model()
@@ -547,21 +548,22 @@ class Simulation:
                 val_X = val_data.drop([target_col], axis=1)
                 val_y = val_data[target_col]
                 self.run_model(train_X, train_y, val_data=(val_X, val_y))
-                cv_loss = self.val_loss
-                cv_losses.append(cv_loss)
-                cv_llp = self.lowest_loss_point
-                cv_llps.append(cv_llp)
+                cv_train_losses.append(self.train_loss)
+                cv_val_losses.append(self.val_loss)
+                cv_ofs.append(self.val_loss - self.train_loss)
+                cv_llps.append(self.lowest_loss_point)
                 if task_type != TaskTypes.regression:
-                    cv_acc = self.model_acc(val_X, val_y)
-                    cv_accs.append(cv_acc)
-                task_type = task_type
+                    cv_train_accs.append(self.train_acc)
+                    cv_val_accs.append(self.val_acc)
             # final cv score
-            self.cv_loss = np.mean(cv_losses)
-            self.cv_llp = np.mean(cv_llps)
+            self.train_loss = np.mean(cv_train_losses)
+            self.val_loss = np.mean(cv_val_losses)
+            self.overfitting = np.mean(cv_ofs)
+            self.cv_allp = np.mean(cv_llps)
             if task_type != TaskTypes.regression:
-                self.cv_acc = np.mean(cv_accs)
-            self.main_loss = self.cv_loss
-            self.overfitting = self.cv_loss - self.train_loss
+                self.train_acc = np.mean(cv_train_accs)
+                self.val_acc = np.mean(cv_val_accs)
+            self.main_loss = self.val_loss
 
         # validation split
         elif validation == ValidationTypes.val_split:
@@ -603,7 +605,7 @@ class Simulation:
                 scaler = gd.scalers[gd.target_col]
                 prop_value = scaler.inverse_transform([prop_value])[0]
             # epochs are counted from 1
-            if prop_name in ["lowest_loss_point", "cv_llp"]:
+            if prop_name in ["lowest_loss_point", "cv_allp"]:
                 prop_value += 1.0
             # formatting floats
             d_before = 2  # 2 because of minus sign
@@ -613,7 +615,7 @@ class Simulation:
                 if prop_name == "lowest_loss_point":
                     d_before = int(math.log10(ms.epochs))
                     d_after = 0
-                if prop_name == "cv_llp":
+                if prop_name == "cv_allp":
                     d_before = int(math.log10(ms.epochs)) + 1
                     d_after = 1
                 d_total = d_before + d_after + 1
