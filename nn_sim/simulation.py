@@ -457,7 +457,7 @@ class Simulation:
 
             # setting up model checkpoint
             callbacks = []
-            if ms.checkpoint:
+            if ms.validation == ValidationTypes.none:
                 process_name = multiprocessing.current_process().name
                 filepath = f"tmp/{process_name}/checkpoint"
                 from keras.callbacks import ModelCheckpoint
@@ -495,7 +495,7 @@ class Simulation:
             history = history.history
 
             # loading best weights
-            if ms.checkpoint:
+            if ms.validation == ValidationTypes.none:
                 self.model.load_weights(filepath)
 
             # calculating loss and accuracy
@@ -577,7 +577,7 @@ class Simulation:
             self.create_model()
             train_X = gd.full_data.drop([target_col], axis=1)
             train_y = gd.full_data[target_col]
-            self.run_model(train_X, train_y, val_data)
+            self.run_model(train_X, train_y)
             self.main_loss = self.train_loss
 
         # saving model
