@@ -6,6 +6,7 @@ from nn_sim import simulation
 import shutil
 import pandas as pd
 import os
+import sys
 
 
 loaded_dataset = None
@@ -13,6 +14,12 @@ target_col = None
 scalers = None
 X_train = None
 X_test = None
+
+
+def print_exit():
+    print(loaded_dataset)
+    loaded_dataset.to_csv("df.csv")
+    sys.exit(0)
 
 
 def intersect_columns(column_list):
@@ -71,6 +78,49 @@ def one_hot_encode(column_list):
     # gluing dataset with encoded part
     not_encoded = loaded_dataset.drop(column_list, axis=1)
     loaded_dataset = pd.concat([not_encoded, encoded], axis=1)
+
+
+def n_hot_encode(column_list, new_name, clip=True):
+    """One-hot encodes needed columns."""
+    column_list = intersect_columns(column_list)
+    global loaded_dataset
+    if not column_list:
+        return
+    # converting columns to string type
+    for col in column_list:
+        loaded_dataset[col] = loaded_dataset[col].astype(str)
+    # concatenating columns into one big column
+    col_list = [loaded_dataset[col] for col in loaded_dataset[column_list]]
+    glued = pd.DataFrame(pd.concat(col_list, ignore_index=True))
+    # fitting encoder to get list of categories
+    encoder = OneHotEncoder()
+    encoder.fit(glued)
+    categories = encoder.categories_
+    # one-hot encoding each column
+    encoded_dfs = []
+    for col in loaded_dataset[column_list]:
+        col_df = pd.DataFrame(loaded_dataset[col])
+        encoded = encoder.transform(col_df)
+        encoded_df = pd.DataFrame(encoded.toarray())
+        encoded_dfs.append(encoded_df)
+    # adding dataframes together
+    final_encoded = encoded_dfs[0]
+    for df_i, other_df in enumerate(encoded_dfs):
+        if df_i == 0:
+            continue
+        final_encoded = final_encoded.add(other_df)
+    # clipping values so only 1s and 0s are in there
+    if clip:
+        final_encoded = final_encoded.clip(0, 1)
+    # creating columns titles
+    for col_i, col_name in enumerate(categories):
+        categories[col_i] = new_name + " " + categories[col_i]
+    categories = np.concatenate(categories)
+    final_encoded.columns = categories
+    # gluing dataset with encoded part
+    loaded_dataset = pd.concat([loaded_dataset, final_encoded], axis=1)
+    # removing original columns
+    loaded_dataset = loaded_dataset.drop(column_list, axis=1)
 
 
 def scale(scale_cols=[], exclude_cols=[]):
